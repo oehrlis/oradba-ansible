@@ -96,15 +96,15 @@ syntax: link ## Syntax-check the playbooks
 
 .PHONY: molecule
 molecule: deps ## Run the molecule default scenario (OL8 and OL9)
-	cd extensions && ../$(BIN)/molecule test -s default $(MOLECULE_ARGS)
+	cd extensions && PATH="$(CURDIR)/$(BIN):$$PATH" ../$(BIN)/molecule test -s default $(MOLECULE_ARGS)
 
 .PHONY: molecule-converge
 molecule-converge: deps ## Converge only, keep containers for debugging
-	cd extensions && ../$(BIN)/molecule converge -s default
+	cd extensions && PATH="$(CURDIR)/$(BIN):$$PATH" ../$(BIN)/molecule converge -s default
 
 .PHONY: molecule-destroy
 molecule-destroy: ## Remove the molecule containers
-	cd extensions && ../$(BIN)/molecule destroy -s default
+	cd extensions && PATH="$(CURDIR)/$(BIN):$$PATH" ../$(BIN)/molecule destroy -s default
 
 .PHONY: test
 test: lint syntax molecule ## Lint, syntax check and molecule
