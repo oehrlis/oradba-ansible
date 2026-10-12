@@ -1,0 +1,110 @@
+---
+# Stub Oracle Homes for the patch roles: no Oracle software in CI. sqlplus
+# answers from a state file per SID, lsnrctl and datapatch succeed. Homes:
+# 19.31.0.0 (source) and 19.32.0.0 (target, matches the patches_info fixture).
+- name: Create the stub homes
+  become: true
+  ansible.builtin.file:
+    path: "/u00/app/oracle/product/{{ item.0 }}/{{ item.1 }}"
+    state: directory
+    owner: oracle
+    group: oinstall
+    mode: "0755"
+  loop: "{{ ['19.31.0.0', '19.32.0.0'] | product(['bin', 'OPatch', 'network/admin']) | list }}"
+
+- name: Create the stub binaries
+  become: true
+  ansible.builtin.copy:
+    dest: "/u00/app/oracle/product/{{ item.0 }}/{{ item.1 }}"
+    content: "{{ verify_stub_scripts[item.1] }}"
+    owner: oracle
+    group: oinstall
+    mode: "0755"
+  loop: "{{ ['19.31.0.0', '19.32.0.0'] | product(['bin/oracle', 'bin/sqlplus', 'bin/lsnrctl', 'OPatch/datapatch'])
+            | list }}"
+  vars:
+    verify_stub_scripts:
+      bin/oracle: |
+        #!/bin/bash
+        exit 0
+      bin/lsnrctl: |
+        #!/bin/bash
+        echo "stub lsnrctl $*"
+        exit 0
+      OPatch/datapatch: |
+        #!/bin/bash
+        echo "stub datapatch $*"
+        exit 0
+      bin/sqlplus: |
+        #!/bin/bash
+        cat >/dev/null
+        cat "/u00/app/oracle/stubdb/${ORACLE_SID}.state" 2>/dev/null
+        exit 0
+
+- name: Create the stub listener.ora in the source home
+  become: true
+  ansible.builtin.copy:
+    dest: /u00/app/oracle/product/19.31.0.0/network/admin/listener.ora
+    content: "# stub\n"
+    owner: oracle
+    mode: "0644"
+
+- name: Create the stub database directory
+  become: true
+  ansible.builtin.file:
+    path: /u00/app/oracle/stubdb
+    state: directory
+    owner: oracle
+    mode: "0755"
+
+- name: Create the stub database states
+  become: true
+  ansible.builtin.copy:
+    dest: "/u00/app/oracle/stubdb/{{ item.sid }}.state"
+    content: |
+      status={{ item.status }}
+      version=19.31.0.0.0
+      role={{ item.role }}
+      open_mode={{ item.open_mode }}
+      log_mode=ARCHIVELOG
+      flashback=NO
+      cdb=YES
+      dg_config={{ item.dg }}
+      broker=FALSE
+      mrp=0
+      grp_count=1
+      grp_name=AUTOUPGRADE_9212_STUB
+      invalid_objects=3
+      invalid_components=0
+      sqlpatch=Release_Update 19.31 APPLY SUCCESS
+    owner: oracle
+    mode: "0644"
+  loop:
+    - { sid: STBY1, status: MOUNTED, role: PHYSICAL STANDBY, open_mode: MOUNTED, dg: 2 }
+    - { sid: PRIM1, status: OPEN, role: PRIMARY, open_mode: READ WRITE, dg: 2 }
+    - { sid: SOLO1, status: OPEN, role: PRIMARY, open_mode: READ WRITE, dg: 0 }
+    - { sid: ROLL1, status: OPEN, role: PRIMARY, open_mode: READ WRITE, dg: 0 }
+
+- name: Register the stub databases in oratab
+  become: true
+  ansible.builtin.lineinfile:
+    path: /etc/oratab
+    regexp: "^{{ item.0 }}:"
+    line: "{{ item.0 }}:/u00/app/oracle/product/{{ item.1 }}:Y"
+    create: true
+    owner: oracle
+    group: oinstall
+    mode: "0664"
+  # ROLL1 runs from the target home already: the rollback test case
+  loop: [[STBY1, 19.31.0.0], [PRIM1, 19.31.0.0], [SOLO1, 19.31.0.0], [ROLL1, 19.32.0.0]]
+
+- name: Create the switch record of ROLL1
+  become: true
+  ansible.builtin.copy:
+    dest: /u00/app/oracle/local/odb_autoupgrade/logs/home_switch_ROLL1.json
+    content: >-
+      {{ {'sid': 'ROLL1', 'source_home': '/u00/app/oracle/product/19.31.0.0',
+          'target_home': '/u00/app/oracle/product/19.32.0.0', 'phase': 'standalone',
+          'version_before': '19.31.0.0.0', 'oratab_autostart': 'Y'} | to_nice_json }}
+    owner: oracle
+    mode: "0640"

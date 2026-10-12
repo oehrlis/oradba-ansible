@@ -5,16 +5,27 @@
 # Name.......: playbooks/home_create.yml
 # Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
 # Date.......: 2026.10.12
-# Version....: v0.1.0
+# Version....: v0.2.0
 # Purpose....: Create an Oracle Home out of place from a downloaded patch set.
 # Notes......: Run: ansible-playbook oradba.automation.home_create -i <inventory>
 #                -e oradba_patch_profile=19.32
-#              The download folder must be on the host (local download or
-#              distributed). Database switch to the new home is not part of
-#              this playbook (planned role oracle_home_switch).
+#              The download folder must be on the host: local download, or
+#              -e oradba_patch_stage_from=<download host> stages it first.
+#              The database switch is the playbook patch_apply.
 # Reference..: https://github.com/oehrlis/oradba-ansible
 # License....: Apache License Version 2.0
 # ------------------------------------------------------------------------------
+
+- name: Stage the patch set
+  hosts: "{{ oradba_playbook_hosts | default('all') }}"
+  gather_facts: false
+  tasks:
+    - name: Stage the download folder on hosts without MOS access
+      ansible.builtin.include_role:
+        name: oradba.automation.patch_stage
+      vars:
+        patch_stage_fetch_from: "{{ oradba_patch_stage_from }}"
+      when: oradba_patch_stage_from | default('') | length > 0
 
 - name: Create an Oracle Home
   hosts: "{{ oradba_playbook_hosts | default('all') }}"

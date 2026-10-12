@@ -114,7 +114,9 @@
     - name: Assert the rendered config follows the conventions
       ansible.builtin.assert:
         that:
-          - "'patch1.target_home=/u00/app/oracle/product/19.32.0.0' in verify_lines"
+          # The stub home product/19.32.0.0 exists, so the engine applies the
+          # naming rule for a second home on the same RU: suffix _2
+          - "'patch1.target_home=/u00/app/oracle/product/19.32.0.0_2' in verify_lines"
           - "'patch1.home_settings.osdba_group=dba' in verify_lines"
           - "'patch1.home_settings.osracdba_group=racdba' in verify_lines"
           - "'patch1.home_settings.inventory_group=oinstall' in verify_lines"

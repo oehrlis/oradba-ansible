@@ -27,12 +27,12 @@ argument_specs:
         description: Target Oracle Home; empty derives it from patches_info.json.
       oracle_home_switch_phase:
         type: str
+        description: Phase of this run; only databases whose runtime role belongs to it are switched,
+          the others are reported.
         choices:
           - standby
           - standalone
           - primary
-        description: Phase of this run; only databases whose runtime role belongs to it are switched,
-          the others are reported.
       oracle_home_switch_listeners:
         type: list
         description: Listener names to stop in the source home and start from the target home; empty leaves

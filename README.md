@@ -23,15 +23,15 @@ From a GitHub release (tarball plus sha256, pinned in `requirements.yml`):
 ```yaml
 # requirements.yml
 collections:
-  - name: https://github.com/oehrlis/oradba-ansible/releases/download/v0.1.0/oradba-automation-0.1.0.tar.gz
+  - name: https://github.com/oehrlis/oradba-ansible/releases/download/v0.2.0/oradba-automation-0.2.0.tar.gz
     type: url
 ```
 
 ```bash
-curl -sLO https://github.com/oehrlis/oradba-ansible/releases/download/v0.1.0/oradba-automation-0.1.0.tar.gz.sha256
-curl -sLO https://github.com/oehrlis/oradba-ansible/releases/download/v0.1.0/oradba-automation-0.1.0.tar.gz
-shasum -a 256 -c oradba-automation-0.1.0.tar.gz.sha256
-ansible-galaxy collection install oradba-automation-0.1.0.tar.gz
+curl -sLO https://github.com/oehrlis/oradba-ansible/releases/download/v0.2.0/oradba-automation-0.2.0.tar.gz.sha256
+curl -sLO https://github.com/oehrlis/oradba-ansible/releases/download/v0.2.0/oradba-automation-0.2.0.tar.gz
+shasum -a 256 -c oradba-automation-0.2.0.tar.gz.sha256
+ansible-galaxy collection install oradba-automation-0.2.0.tar.gz
 ```
 
 Galaxy publication is planned later.
@@ -48,10 +48,14 @@ Galaxy publication is planned later.
 | [`autoupgrade_keystore`](roles/autoupgrade_keystore/README.md) | MOS keystore on a download host | `au_keystore.sh --create`, `--check` |
 | [`patch_download`](roles/patch_download/README.md) | Download a patch set by profile, verify, report the pin | `au_run.sh -mode download`, `au_patch_pin.sh`, `au_patch_verify.sh` |
 | [`oracle_home_create`](roles/oracle_home_create/README.md) | New Oracle Home out of place, root scripts, verification | `au_run.sh -mode create_home`, `au_home_verify.sh` |
+| [`autoupgrade_preflight`](roles/autoupgrade_preflight/README.md) | Checks before a switch, all findings in one report | `au_run.sh -mode analyze`, `au_patch_verify.sh`, `au_home_verify.sh` |
+| [`patch_stage`](roles/patch_stage/README.md) | Download folder to hosts without MOS access | `au_patch_verify.sh` |
+| [`oracle_home_switch`](roles/oracle_home_switch/README.md) | Databases to the new home in Data Guard order (untested on a real DB) | `au_run.sh -mode deploy` |
+| [`oracle_home_rollback`](roles/oracle_home_rollback/README.md) | Back to the previous home: restore point or home switch (untested on a real DB) | - (SQL*Plus, datapatch) |
 <!-- markdownlint-restore -->
 
-Planned roles (from the decomposition of the oci-labs `db19_engineering` role): `os_prereq`, `autoupgrade_preflight`,
-`patch_stage`, `oracle_home_switch`, `oracle_home_rollback`, `db_create`, `oradba_install`.
+Planned roles (from the decomposition of the oci-labs `db19_engineering` role): `os_prereq`, `db_create`,
+`oradba_install`. Patch apply procedure: [docs/patch-apply.md](docs/patch-apply.md).
 
 ## Playbooks
 
@@ -59,6 +63,8 @@ Planned roles (from the decomposition of the oci-labs `db19_engineering` role): 
 ansible-playbook -i inventory oradba.automation.site_setup
 ansible-playbook -i inventory oradba.automation.patch_download -e oradba_patch_profile=19.32
 ansible-playbook -i inventory oradba.automation.home_create -e oradba_patch_profile=19.32
+ansible-playbook -i inventory oradba.automation.patch_apply -e oradba_patch_profile=19.32
+ansible-playbook -i inventory oradba.automation.patch_rollback -e oracle_home_rollback_mode=home
 ```
 
 <!-- markdownlint-disable MD013 MD060 -->
@@ -67,6 +73,8 @@ ansible-playbook -i inventory oradba.automation.home_create -e oradba_patch_prof
 | `site_setup` | `oracle_user`, `oracle_layout`, `odb_autoupgrade_install`; `autoupgrade_keystore` on hosts with `oradba_download_host: true` |
 | `patch_download` | `patch_download` on download hosts |
 | `home_create` | `oracle_home_create` |
+| `patch_apply` | `patch_stage` (optional), `autoupgrade_preflight`, `oracle_home_switch` per phase: standby, standalone, primary |
+| `patch_rollback` | `oracle_home_rollback` per phase: primary, standalone, standby; mode required |
 <!-- markdownlint-restore -->
 
 All playbooks target `oradba_playbook_hosts` (default `all`). An example inventory is in

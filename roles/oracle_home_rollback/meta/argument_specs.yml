@@ -20,11 +20,11 @@ argument_specs:
           home plus datapatch); required.
       oracle_home_rollback_phase:
         type: str
+        description: Phase of this run, same filter as oracle_home_switch_phase.
         choices:
           - standby
           - standalone
           - primary
-        description: Phase of this run, same filter as oracle_home_switch_phase.
       oracle_home_rollback_listeners:
         type: list
         description: Listener names to move back to the previous home.
