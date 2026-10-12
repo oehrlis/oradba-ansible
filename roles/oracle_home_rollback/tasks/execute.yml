@@ -1,0 +1,147 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: roles/oracle_home_rollback/tasks/execute.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.2.0
+# Purpose....: Execute the rollback of one database (mode restore or home).
+# Reference..: https://github.com/oehrlis/oradba-ansible
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Stop the listeners in the current home
+  become: true
+  become_user: "{{ oracle_home_rollback_owner }}"
+  ansible.builtin.command:
+    argv: ["{{ oracle_home_rollback_state.home }}/bin/lsnrctl", "stop", "{{ item }}"]
+  environment:
+    ORACLE_HOME: "{{ oracle_home_rollback_state.home }}"
+    TNS_ADMIN: "{{ oracle_home_rollback_tns_admin or (oracle_home_rollback_state.home ~ '/network/admin') }}"
+  register: oracle_home_rollback_lsnr_stop
+  changed_when: oracle_home_rollback_lsnr_stop.rc == 0
+  failed_when: oracle_home_rollback_lsnr_stop.rc not in [0, 1]
+  loop: "{{ oracle_home_rollback_listeners }}"
+
+- name: Shut the database down from the current home
+  ansible.builtin.include_tasks: sql.yml
+  vars:
+    oracle_home_rollback_sql_label: shutdown immediate
+    oracle_home_rollback_sql_home: "{{ oracle_home_rollback_state.home }}"
+    oracle_home_rollback_sql: shutdown immediate
+
+# Autostart off until the database is back, so a dbstart or systemd unit in
+# between cannot bring it up on the wrong binaries.
+- name: Point oratab at the previous home, autostart off for the duration
+  become: true
+  ansible.builtin.lineinfile:
+    path: /etc/oratab
+    regexp: "^{{ oracle_home_rollback_sid | regex_escape }}:"
+    line: "{{ oracle_home_rollback_sid }}:{{ oracle_home_rollback_previous }}:N"
+    backup: true
+
+- name: Flash back and open from the previous home
+  ansible.builtin.include_tasks: sql.yml
+  vars:
+    oracle_home_rollback_sql_label: flashback to {{ oracle_home_rollback_state.grp_name }}
+    oracle_home_rollback_sql_home: "{{ oracle_home_rollback_previous }}"
+    oracle_home_rollback_sql: |
+      startup mount
+      flashback database to restore point {{ oracle_home_rollback_state.grp_name }};
+      alter database open resetlogs;
+      {{ 'alter pluggable database all open;' if oracle_home_rollback_state.cdb | default('NO') == 'YES' else '' }}
+  when: oracle_home_rollback_mode == 'restore'
+
+- name: Start from the previous home
+  ansible.builtin.include_tasks: sql.yml
+  vars:
+    oracle_home_rollback_sql_label: startup from the previous home
+    oracle_home_rollback_sql_home: "{{ oracle_home_rollback_previous }}"
+    oracle_home_rollback_sql: >-
+      {{ 'startup mount' if oracle_home_rollback_phase == 'standby' else 'startup' }}
+  when: oracle_home_rollback_mode == 'home'
+
+- name: Roll the SQL patches back with datapatch
+  become: true
+  become_user: "{{ oracle_home_rollback_owner }}"
+  ansible.builtin.command:
+    argv: ["{{ oracle_home_rollback_previous }}/OPatch/datapatch", "-verbose"]
+  environment:
+    ORACLE_HOME: "{{ oracle_home_rollback_previous }}"
+    ORACLE_SID: "{{ oracle_home_rollback_sid }}"
+    ORACLE_BASE: "{{ oradba_oracle_base }}"
+  register: oracle_home_rollback_datapatch
+  changed_when: true
+  when:
+    - oracle_home_rollback_mode == 'home'
+    - oracle_home_rollback_phase != 'standby'
+    - oracle_home_rollback_run_datapatch | bool
+
+- name: Recompile invalid objects
+  ansible.builtin.include_tasks: sql.yml
+  vars:
+    oracle_home_rollback_sql_label: utlrp
+    oracle_home_rollback_sql_home: "{{ oracle_home_rollback_previous }}"
+    oracle_home_rollback_sql: "@?/rdbms/admin/utlrp.sql"
+  when:
+    - oracle_home_rollback_mode == 'home'
+    - oracle_home_rollback_phase != 'standby'
+    - oracle_home_rollback_run_datapatch | bool
+
+- name: Start managed recovery on the standby
+  ansible.builtin.include_tasks: sql.yml
+  vars:
+    oracle_home_rollback_sql_label: start managed recovery
+    oracle_home_rollback_sql_home: "{{ oracle_home_rollback_previous }}"
+    oracle_home_rollback_sql: alter database recover managed standby database disconnect from session;
+  when:
+    - oracle_home_rollback_phase == 'standby'
+    - oracle_home_rollback_state.broker | default('FALSE') != 'TRUE'
+
+- name: Re-enable autostart with the previous home
+  become: true
+  ansible.builtin.lineinfile:
+    path: /etc/oratab
+    regexp: "^{{ oracle_home_rollback_sid | regex_escape }}:"
+    line: >-
+      {{ oracle_home_rollback_sid }}:{{ oracle_home_rollback_previous }}:{{
+         oracle_home_rollback_record.oratab_autostart | default('Y', true) }}
+
+- name: Start the listeners from the previous home
+  become: true
+  become_user: "{{ oracle_home_rollback_owner }}"
+  ansible.builtin.command:
+    argv: ["{{ oracle_home_rollback_previous }}/bin/lsnrctl", "start", "{{ item }}"]
+  environment:
+    ORACLE_HOME: "{{ oracle_home_rollback_previous }}"
+    TNS_ADMIN: "{{ oracle_home_rollback_tns_admin or (oracle_home_rollback_previous ~ '/network/admin') }}"
+  register: oracle_home_rollback_lsnr_start
+  changed_when: oracle_home_rollback_lsnr_start.rc == 0
+  failed_when:
+    - oracle_home_rollback_lsnr_start.rc != 0
+    - "'TNS-01106' not in oracle_home_rollback_lsnr_start.stdout"
+  loop: "{{ oracle_home_rollback_listeners }}"
+
+- name: Read the state after the rollback
+  ansible.builtin.include_role:
+    name: oradba.automation.oradba
+    tasks_from: db_state
+  vars:
+    oradba_db_sid: "{{ oracle_home_rollback_sid }}"
+
+- name: Assert the database is up from the previous home
+  ansible.builtin.assert:
+    that:
+      - oradba_db_state.home == oracle_home_rollback_previous
+      - oradba_db_state.status in (['OPEN', 'MOUNTED'] if oracle_home_rollback_phase == 'standby' else ['OPEN'])
+    fail_msg: >-
+      {{ oracle_home_rollback_sid }} after rollback: {{ oradba_db_state.status }} from {{ oradba_db_state.home }},
+      version {{ oradba_db_state.version | default('?') }}.
+    quiet: true
+
+- name: Record the rollback
+  ansible.builtin.set_fact:
+    oracle_home_rollback_results: >-
+      {{ oracle_home_rollback_results + [oracle_home_rollback_sid ~ ': ' ~ oracle_home_rollback_mode ~ ' -> '
+         ~ (oradba_db_state.version | default('?')) ~ ' from ' ~ oracle_home_rollback_previous] }}

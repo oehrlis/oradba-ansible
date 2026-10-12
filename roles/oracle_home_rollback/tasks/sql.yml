@@ -1,0 +1,32 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: roles/oracle_home_rollback/tasks/sql.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.2.0
+# Purpose....: Run a SQL*Plus script as sysdba (inputs oracle_home_rollback_sql,
+#              oracle_home_rollback_sql_home, oracle_home_rollback_sql_label).
+#              Any SQL error fails the task.
+# Reference..: https://github.com/oehrlis/oradba-ansible
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Run SQL - {{ oracle_home_rollback_sql_label }}
+  become: true
+  become_user: "{{ oracle_home_rollback_owner }}"
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      "${ORACLE_HOME}/bin/sqlplus" -s -L / as sysdba <<'SQL'
+      whenever sqlerror exit failure
+      {{ oracle_home_rollback_sql | indent(6) }}
+      exit
+      SQL
+    executable: /bin/bash
+  environment:
+    ORACLE_HOME: "{{ oracle_home_rollback_sql_home }}"
+    ORACLE_SID: "{{ oracle_home_rollback_state.sid }}"
+    ORACLE_BASE: "{{ oradba_oracle_base }}"
+  changed_when: true

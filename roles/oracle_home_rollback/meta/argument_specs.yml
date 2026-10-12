@@ -1,0 +1,45 @@
+---
+# Generated from defaults/main.yml and reviewed; keep both in step.
+argument_specs:
+  main:
+    short_description: Roll databases back to the previous Oracle Home (restore point or home switch)
+    options:
+      oracle_home_rollback_base:
+        type: str
+        description: Install directory of the engine (location of the switch records).
+      oracle_home_rollback_owner:
+        type: str
+        description: Software owner.
+      oracle_home_rollback_databases:
+        type: str
+        description: Databases to roll back, same format as oradba_patch_databases; source_home overrides
+          the switch record.
+      oracle_home_rollback_mode:
+        type: str
+        description: restore (flashback to the deploy restore point, loses later changes) or home (previous
+          home plus datapatch); required.
+      oracle_home_rollback_phase:
+        type: str
+        choices:
+          - standby
+          - standalone
+          - primary
+        description: Phase of this run, same filter as oracle_home_switch_phase.
+      oracle_home_rollback_listeners:
+        type: list
+        description: Listener names to move back to the previous home.
+        elements: str
+      oracle_home_rollback_tns_admin:
+        type: str
+        description: Central TNS_ADMIN directory; empty uses network/admin of each home.
+      oracle_home_rollback_allow_restore_with_dg:
+        type: bool
+        description: Allow mode restore for a Data Guard member (the partner needs its own flashback or
+          reinstate).
+      oracle_home_rollback_run_datapatch:
+        type: bool
+        description: Mode home - run datapatch and utlrp from the previous home on primary and standalone
+          databases.
+      oracle_home_rollback_dry_run:
+        type: bool
+        description: Report the planned rollback per database without executing it.

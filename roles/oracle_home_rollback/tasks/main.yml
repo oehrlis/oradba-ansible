@@ -1,0 +1,44 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: roles/oracle_home_rollback/tasks/main.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.2.0
+# Purpose....: Roll the databases of a host back to the home they ran from
+#              before oracle_home_switch (record logs/home_switch_<SID>.json).
+# Notes......: Mode restore follows the oci-labs rollback (measured 2026-08-21):
+#              shutdown from the new home, oratab back with autostart off,
+#              flashback from the old home, open resetlogs, PDBs open, autostart
+#              back on. Mode home follows the USZ runbook (2026-10-08): restart
+#              from the old home, datapatch, utlrp.
+#              NOT YET RUN AGAINST A REAL DATABASE (v0.2.0). Data Guard order for
+#              a rollback: check MOS 1265700.1 before using phase primary/standby.
+# Reference..: https://github.com/oehrlis/oradba-ansible
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Assert a rollback mode is chosen
+  ansible.builtin.assert:
+    that:
+      - oracle_home_rollback_mode in ['restore', 'home']
+    fail_msg: >-
+      Set oracle_home_rollback_mode explicitly: restore (flashback, loses changes after the
+      restore point) or home (previous home plus datapatch, keeps data).
+    quiet: true
+
+- name: Start with an empty result list
+  ansible.builtin.set_fact:
+    oracle_home_rollback_results: []
+
+- name: Roll back each database
+  ansible.builtin.include_tasks: database.yml
+  loop: "{{ oracle_home_rollback_databases }}"
+  loop_control:
+    loop_var: oracle_home_rollback_db
+    label: "{{ oracle_home_rollback_db.sid | default(oracle_home_rollback_db) }}"
+
+- name: Report the rollback result
+  ansible.builtin.debug:
+    msg: "{{ oracle_home_rollback_results }}"

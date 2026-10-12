@@ -1,0 +1,130 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: roles/oracle_home_switch/tasks/after_deploy.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.2.0
+# Purpose....: Complete a deploy: network files, oratab, listeners, standby
+#              apply, post checks against the state before the switch.
+# Notes......: AutoUpgrade moves the database but not the listener (measured in
+#              oci-labs 2026-08-21) and does not copy network files reliably
+#              (unverified in au_facts) - both are done here.
+# Reference..: https://github.com/oehrlis/oradba-ansible
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Copy the network files into the target home
+  when: oracle_home_switch_tns_admin | length == 0
+  block:
+    - name: List the network files of the source home
+      ansible.builtin.find:
+        paths: "{{ oracle_home_switch_before.home }}/network/admin"
+        patterns: "*.ora"
+        file_type: any
+      register: oracle_home_switch_netfiles
+
+    - name: Copy network files that the target home does not have
+      become: true
+      ansible.builtin.copy:
+        src: "{{ item.path }}"
+        dest: "{{ oracle_home_switch_target }}/network/admin/{{ item.path | basename }}"
+        remote_src: true
+        force: false
+        owner: "{{ oracle_home_switch_owner }}"
+        mode: "0644"
+      loop: "{{ oracle_home_switch_netfiles.files }}"
+      loop_control:
+        label: "{{ item.path | basename }}"
+
+# AutoUpgrade updates oratab itself; this only repairs a missed entry and keeps
+# the autostart flag of the source entry.
+- name: Point oratab at the target home
+  become: true
+  ansible.builtin.lineinfile:
+    path: /etc/oratab
+    regexp: "^{{ oracle_home_switch_before.sid | regex_escape }}:"
+    line: >-
+      {{ oracle_home_switch_before.sid }}:{{ oracle_home_switch_target }}:{{
+         oracle_home_switch_before.oratab_autostart | default('N', true) }}
+    backup: true
+
+- name: Start the listeners from the target home
+  become: true
+  become_user: "{{ oracle_home_switch_owner }}"
+  ansible.builtin.command:
+    argv:
+      - "{{ oracle_home_switch_target }}/bin/lsnrctl"
+      - start
+      - "{{ item }}"
+  environment:
+    ORACLE_HOME: "{{ oracle_home_switch_target }}"
+    TNS_ADMIN: "{{ oracle_home_switch_tns_admin or (oracle_home_switch_target ~ '/network/admin') }}"
+  register: oracle_home_switch_lsnr_start
+  # TNS-01106: already running from the target home (a second run)
+  changed_when: oracle_home_switch_lsnr_start.rc == 0
+  failed_when:
+    - oracle_home_switch_lsnr_start.rc != 0
+    - "'TNS-01106' not in oracle_home_switch_lsnr_start.stdout"
+  loop: "{{ oracle_home_switch_listeners }}"
+
+- name: Read the state after the deploy
+  ansible.builtin.include_role:
+    name: oradba.automation.oradba
+    tasks_from: db_state
+  vars:
+    oradba_db_sid: "{{ oracle_home_switch_before.sid }}"
+    oradba_db_home: "{{ oracle_home_switch_target }}"
+
+- name: Start managed recovery on the standby
+  become: true
+  become_user: "{{ oracle_home_switch_owner }}"
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      "${ORACLE_HOME}/bin/sqlplus" -s -L / as sysdba <<'SQL'
+      whenever sqlerror exit failure
+      alter database recover managed standby database disconnect from session;
+      exit
+      SQL
+    executable: /bin/bash
+  environment:
+    ORACLE_HOME: "{{ oracle_home_switch_target }}"
+    ORACLE_SID: "{{ oracle_home_switch_before.sid }}"
+    ORACLE_BASE: "{{ oradba_oracle_base }}"
+  changed_when: true
+  when:
+    - oracle_home_switch_phase == 'standby'
+    - oracle_home_switch_manage_apply | bool
+    - oradba_db_state.broker | default('FALSE') != 'TRUE'
+    - oradba_db_state.mrp | default('0') | int == 0
+
+- name: Assert the database runs from the target home
+  ansible.builtin.assert:
+    that:
+      - oradba_db_state.status in (['OPEN', 'MOUNTED'] if oracle_home_switch_phase == 'standby' else ['OPEN'])
+      - >-
+        oracle_home_switch_phase == 'standby'
+        or (oradba_db_state.invalid_components | default('0') | int == 0
+            and oradba_db_state.sqlpatch | default('') is search('SUCCESS')
+            and (oradba_db_state.invalid_objects | default('0') | int)
+                - (oracle_home_switch_before.invalid_objects | default('0') | int)
+                <= oracle_home_switch_max_new_invalid | int)
+    fail_msg: >-
+      Post check failed for {{ oradba_db_state.sid }}: status {{ oradba_db_state.status }},
+      version {{ oradba_db_state.version | default('?') }}, invalid components
+      {{ oradba_db_state.invalid_components | default('?') }}, invalid objects
+      {{ oradba_db_state.invalid_objects | default('?') }} (before
+      {{ oracle_home_switch_before.invalid_objects | default('?') }}), last SQL patch
+      "{{ oradba_db_state.sqlpatch | default('?') }}". Rollback: oracle_home_rollback.
+    quiet: true
+
+- name: Record the switch
+  ansible.builtin.set_fact:
+    oracle_home_switch_results: >-
+      {{ oracle_home_switch_results + [oradba_db_state.sid ~ ': ' ~ oracle_home_switch_phase ~ ' '
+         ~ (oracle_home_switch_before.version | default('?')) ~ ' -> ' ~ (oradba_db_state.version | default('?'))
+         ~ ' from ' ~ oracle_home_switch_target
+         ~ ((' (apply: MRP ' ~ oradba_db_state.mrp | default('?') ~ ', broker '
+             ~ oradba_db_state.broker | default('?') ~ ')') if oracle_home_switch_phase == 'standby' else '')] }}

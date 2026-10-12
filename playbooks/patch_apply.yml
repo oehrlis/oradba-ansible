@@ -1,0 +1,79 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: playbooks/patch_apply.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.2.0
+# Purpose....: Apply a patch set: optional staging, preflight, then the home
+#              switch in Data Guard order - standbys, databases without Data
+#              Guard, primaries - on the same hosts.
+# Notes......: Run: ansible-playbook oradba.automation.patch_apply -i <inventory>
+#                -e oradba_patch_profile=19.32
+#              Prerequisites: home_create on every host. Per host:
+#              oradba_patch_databases (host_vars). oradba_patch_stage_from =
+#              download host stages the folder first. Any failure stops all
+#              hosts (any_errors_fatal). oradba_patch_serial (default 1) = hosts
+#              per batch within a phase.
+#              NOT YET RUN AGAINST A REAL DATABASE (v0.2.0).
+# Reference..: https://github.com/oehrlis/oradba-ansible
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Stage the patch set
+  hosts: "{{ oradba_playbook_hosts | default('all') }}"
+  gather_facts: false
+  any_errors_fatal: true
+  tasks:
+    - name: Stage the download folder
+      ansible.builtin.include_role:
+        name: oradba.automation.patch_stage
+      vars:
+        patch_stage_fetch_from: "{{ oradba_patch_stage_from }}"
+      when: oradba_patch_stage_from | default('') | length > 0
+
+- name: Preflight
+  hosts: "{{ oradba_playbook_hosts | default('all') }}"
+  gather_facts: false
+  any_errors_fatal: true
+  tasks:
+    - name: Run the preflight checks
+      ansible.builtin.include_role:
+        name: oradba.automation.autoupgrade_preflight
+
+- name: Switch the standby databases
+  hosts: "{{ oradba_playbook_hosts | default('all') }}"
+  gather_facts: false
+  any_errors_fatal: true
+  serial: "{{ oradba_patch_serial | default(1) }}"
+  tasks:
+    - name: Switch the standby databases
+      ansible.builtin.include_role:
+        name: oradba.automation.oracle_home_switch
+      vars:
+        oracle_home_switch_phase: standby
+
+- name: Switch the databases without Data Guard
+  hosts: "{{ oradba_playbook_hosts | default('all') }}"
+  gather_facts: false
+  any_errors_fatal: true
+  serial: "{{ oradba_patch_serial | default(1) }}"
+  tasks:
+    - name: Switch the standalone databases
+      ansible.builtin.include_role:
+        name: oradba.automation.oracle_home_switch
+      vars:
+        oracle_home_switch_phase: standalone
+
+- name: Switch the primary databases
+  hosts: "{{ oradba_playbook_hosts | default('all') }}"
+  gather_facts: false
+  any_errors_fatal: true
+  serial: "{{ oradba_patch_serial | default(1) }}"
+  tasks:
+    - name: Switch the primary databases
+      ansible.builtin.include_role:
+        name: oradba.automation.oracle_home_switch
+      vars:
+        oracle_home_switch_phase: primary

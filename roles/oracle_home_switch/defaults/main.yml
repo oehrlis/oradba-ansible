@@ -1,0 +1,48 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: roles/oracle_home_switch/defaults/main.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.2.0
+# Purpose....: Defaults for moving databases to a new Oracle Home with the
+#              engine deploy mode.
+# Reference..: https://github.com/oehrlis/oradba-ansible
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+oracle_home_switch_base: "{{ oradba_autoupgrade_base }}"
+oracle_home_switch_owner: "{{ oradba_oracle_user }}"
+oracle_home_switch_profile: "{{ oradba_patch_profile }}"
+oracle_home_switch_profile_dir: "{{ oradba_patch_profile_dir }}"
+oracle_home_switch_folder: >-
+  {{ oracle_home_switch_base }}/patches/{{ oracle_home_switch_profile | basename | regex_replace('\.profile$', '') }}
+oracle_home_switch_databases: "{{ oradba_patch_databases }}"
+oracle_home_switch_target_home: "{{ oradba_patch_target_home }}"
+
+# Phase of this run, set by the playbook (patch_apply.yml runs standby, then
+# standalone, then primary on the same hosts). Only databases whose runtime
+# role (v$database) belongs to the phase are switched; the others are reported
+# with the phase that handles them: standby = PHYSICAL STANDBY, standalone =
+# PRIMARY without Data Guard, primary = PRIMARY with Data Guard members.
+oracle_home_switch_phase: standalone
+
+# Listeners to stop in the source home and start from the target home;
+# empty = the role does not touch listeners
+oracle_home_switch_listeners: []
+# Central TNS_ADMIN (network files outside the homes); empty = copy *.ora from
+# <source home>/network/admin into the target home (existing files are kept)
+oracle_home_switch_tns_admin: ""
+# Start managed recovery on a standby after the deploy when it is not running
+# (skipped when dg_broker_start is TRUE - the broker owns the apply state)
+oracle_home_switch_manage_apply: true
+# Tolerated new invalid objects after the switch (delta to the baseline)
+oracle_home_switch_max_new_invalid: 0
+# Extra caller environment for the engine, no secrets
+oracle_home_switch_environment: {}
+# Pass --dry-run to au_run.sh: no database is touched, post checks are skipped
+oracle_home_switch_dry_run: false
+
+oracle_home_switch_async_timeout: 21600
+oracle_home_switch_async_poll: 30

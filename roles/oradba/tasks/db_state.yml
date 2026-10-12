@@ -88,9 +88,20 @@
                     'oratab_home': oradba_db_oratab_entry[1] | default(''),
                     'oratab_autostart': oradba_db_oratab_entry[2] | default('')}) }}
 
+# Patch phase from the runtime role: standbys first, then databases without
+# Data Guard, then the primaries of a Data Guard configuration.
+- name: Classify the patch phase of {{ oradba_db_sid }}
+  ansible.builtin.set_fact:
+    oradba_db_state: >-
+      {{ oradba_db_state | combine({'phase':
+           'standby' if oradba_db_state.role | default('') == 'PHYSICAL STANDBY'
+           else ('primary' if oradba_db_state.role | default('') == 'PRIMARY'
+                              and oradba_db_state.dg_config | default('0') | int > 1
+           else ('standalone' if oradba_db_state.role | default('') == 'PRIMARY' else 'unknown'))}) }}
+
 - name: Report the state of {{ oradba_db_sid }}
   ansible.builtin.debug:
     msg: >-
       {{ oradba_db_sid }}: {{ oradba_db_state.status }} {{ oradba_db_state.role | default('-') }}
       {{ oradba_db_state.open_mode | default('-') }} {{ oradba_db_state.version | default('-') }}
-      from {{ oradba_db_state.home }}
+      from {{ oradba_db_state.home }} (phase {{ oradba_db_state.phase }})

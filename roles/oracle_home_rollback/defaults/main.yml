@@ -1,0 +1,34 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: roles/oracle_home_rollback/defaults/main.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.2.0
+# Purpose....: Defaults for rolling databases back to their previous home.
+# Reference..: https://github.com/oehrlis/oradba-ansible
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+oracle_home_rollback_base: "{{ oradba_autoupgrade_base }}"
+oracle_home_rollback_owner: "{{ oradba_oracle_user }}"
+oracle_home_rollback_databases: "{{ oradba_patch_databases }}"
+
+# Required, no default on purpose:
+# restore = flashback to the guaranteed restore point of the deploy, open
+#           resetlogs (inside the window - all changes after the point are lost;
+#           refused for Data Guard members)
+# home    = back to the previous home, datapatch from it rolls the SQL patches
+#           back (after the window - keeps all data)
+oracle_home_rollback_mode: ""
+# Same phase filter as oracle_home_switch (standby, standalone, primary)
+oracle_home_rollback_phase: standalone
+oracle_home_rollback_listeners: []
+oracle_home_rollback_tns_admin: ""
+# Allow mode restore for a Data Guard member (the other side then needs its
+# own flashback or reinstate - not done by this role)
+oracle_home_rollback_allow_restore_with_dg: false
+# Mode home: run datapatch and utlrp from the previous home (primary, standalone)
+oracle_home_rollback_run_datapatch: true
+oracle_home_rollback_dry_run: false
