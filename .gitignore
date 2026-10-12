@@ -17,10 +17,10 @@ __pycache__/
 .claude/worktrees/
 .github/copilot-instructions.md
 # Local working material - never commit
-tasks/
-ref/
+/tasks/
+/ref/
 # Site data never belongs here (maintenance rule 8)
-inventory/
+/inventory/
 *.vault.yml
 *.p12
 *.sso

@@ -1,0 +1,65 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: roles/autoupgrade_keystore/tasks/main.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.1.0
+# Purpose....: Create the AutoUpgrade MOS keystore with bin/au_keystore.sh and
+#              check it.
+# Notes......: Passwords reach the engine only through pass files (mode 0600 in
+#              a 0700 temp directory of the software owner) that are removed in
+#              an always block - never on argv, never in the environment.
+#              An existing keystore is kept unless autoupgrade_keystore_force.
+# Reference..: https://github.com/oehrlis/odb_autoupgrade/blob/main/doc/keystore-and-jar.md
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Assert the engine is installed
+  ansible.builtin.stat:
+    path: "{{ autoupgrade_keystore_base }}/bin/au_keystore.sh"
+  register: autoupgrade_keystore_engine
+  failed_when: not autoupgrade_keystore_engine.stat.exists
+
+- name: Look for an existing keystore
+  ansible.builtin.stat:
+    path: "{{ autoupgrade_keystore_dir }}/ewallet.p12"
+  register: autoupgrade_keystore_ewallet
+
+- name: Report that the existing keystore is kept
+  ansible.builtin.debug:
+    msg: >-
+      Keystore exists in {{ autoupgrade_keystore_dir }} - not recreated. Set
+      autoupgrade_keystore_force=true to recreate it (the engine backs it up first).
+  when:
+    - autoupgrade_keystore_ewallet.stat.exists
+    - not autoupgrade_keystore_force | bool
+
+- name: Create the keystore
+  ansible.builtin.include_tasks: create.yml
+  when: not autoupgrade_keystore_ewallet.stat.exists or autoupgrade_keystore_force | bool
+
+- name: Check the keystore
+  become: true
+  become_user: "{{ autoupgrade_keystore_owner }}"
+  ansible.builtin.command:
+    argv:
+      - "{{ autoupgrade_keystore_base }}/bin/au_keystore.sh"
+      - --check
+      - --workdir
+      - "{{ autoupgrade_keystore_dir }}"
+  register: autoupgrade_keystore_check_run
+  changed_when: false
+  # 0 = ok, 2 = warnings only (e.g. key pair not verifiable without mkstore)
+  failed_when: autoupgrade_keystore_check_run.rc not in [0, 2]
+  when:
+    - autoupgrade_keystore_check | bool
+    - not autoupgrade_keystore_dry_run | bool
+
+- name: Report keystore check warnings
+  ansible.builtin.debug:
+    msg: "{{ autoupgrade_keystore_check_run.stderr_lines | select('search', 'WARN') | list }}"
+  when:
+    - autoupgrade_keystore_check_run is not skipped
+    - autoupgrade_keystore_check_run.rc | default(0) == 2

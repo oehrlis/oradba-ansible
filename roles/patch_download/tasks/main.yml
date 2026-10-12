@@ -1,0 +1,151 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: roles/patch_download/tasks/main.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.1.0
+# Purpose....: Download a patch set with au_run.sh --profile ... -mode download,
+#              then verify the folder and report the pinned patch list.
+# Notes......: au_run.sh writes the pin file itself after the download. A folder
+#              that carries a pin file is not downloaded again (no silent skip:
+#              the reason and the override are printed).
+# Reference..: https://github.com/oehrlis/odb_autoupgrade/blob/main/doc/patch-profiles.md
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Assert the engine is installed
+  ansible.builtin.stat:
+    path: "{{ patch_download_base }}/bin/au_run.sh"
+  register: patch_download_engine
+  failed_when: not patch_download_engine.stat.exists
+
+# The directory always exists so that AU_PROFILE_DIR never points to nothing
+- name: Create the profile directory
+  become: true
+  ansible.builtin.file:
+    path: "{{ patch_download_profile_dir }}"
+    state: directory
+    owner: "{{ patch_download_owner }}"
+    mode: "0755"
+
+- name: Copy the site profiles
+  become: true
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ patch_download_profile_dir }}/{{ item | basename }}"
+    owner: "{{ patch_download_owner }}"
+    mode: "0644"
+  loop: "{{ patch_download_profiles }}"
+
+- name: Create the download folder
+  become: true
+  ansible.builtin.file:
+    path: "{{ patch_download_folder }}"
+    state: directory
+    owner: "{{ patch_download_owner }}"
+    mode: "0750"
+
+- name: Look for an existing pin file
+  ansible.builtin.stat:
+    path: "{{ patch_download_folder }}/au_patch.env"
+  register: patch_download_pin_before
+
+- name: Report that the download is skipped
+  ansible.builtin.debug:
+    msg: >-
+      {{ patch_download_folder }} already has a pin file - download skipped.
+      Set patch_download_force=true to download again.
+  when:
+    - patch_download_pin_before.stat.exists
+    - not patch_download_force | bool
+    - not patch_download_dry_run | bool
+
+- name: Download profile {{ patch_download_profile }}
+  become: true
+  become_user: "{{ patch_download_owner }}"
+  ansible.builtin.command:
+    argv: >-
+      {{ [patch_download_base ~ '/bin/au_run.sh']
+         + (['--dry-run'] if patch_download_dry_run | bool else [])
+         + ['--profile', patch_download_profile,
+            '-config', patch_download_base ~ '/etc/au_patch.cfg',
+            '-patch', '-mode', 'download', '-noconsole'] }}
+  environment: "{{ patch_download_environment | combine({'AU_DOWNLOAD_FOLDER': patch_download_folder,
+                   'AU_PROFILE_DIR': patch_download_profile_dir}) }}"
+  register: patch_download_run
+  changed_when: not patch_download_dry_run | bool
+  async: "{{ patch_download_async_timeout }}"
+  poll: "{{ patch_download_async_poll }}"
+  when: >-
+    patch_download_dry_run | bool or patch_download_force | bool
+    or not patch_download_pin_before.stat.exists
+
+- name: Report the engine output
+  ansible.builtin.debug:
+    msg: >-
+      {{ ((patch_download_run.stdout_lines | default([]))
+          + (patch_download_run.stderr_lines | default([])))[-40:] }}
+  when: patch_download_run is not skipped
+
+- name: Resolve the MRP to a plain patch number in the pin file
+  when:
+    - patch_download_resolve_mrp | bool
+    - not patch_download_dry_run | bool
+  block:
+    - name: Checksum the pin file before resolving the MRP
+      ansible.builtin.stat:
+        path: "{{ patch_download_folder }}/au_patch.env"
+      register: patch_download_pin_unresolved
+
+    - name: Run au_patch_pin.sh --resolve-mrp
+      become: true
+      become_user: "{{ patch_download_owner }}"
+      ansible.builtin.command:
+        argv:
+          - "{{ patch_download_base }}/bin/au_patch_pin.sh"
+          - --resolve-mrp
+          - --force
+          - --yes
+          - "{{ patch_download_folder }}"
+      changed_when: false
+
+    - name: Checksum the pin file after resolving the MRP
+      ansible.builtin.stat:
+        path: "{{ patch_download_folder }}/au_patch.env"
+      register: patch_download_pin_resolved
+      changed_when: >-
+        patch_download_pin_resolved.stat.checksum | default('')
+        != patch_download_pin_unresolved.stat.checksum | default('')
+
+- name: Verify the download folder
+  become: true
+  become_user: "{{ patch_download_owner }}"
+  ansible.builtin.command:
+    argv:
+      - "{{ patch_download_base }}/bin/au_patch_verify.sh"
+      - "{{ patch_download_folder }}"
+  register: patch_download_verify_run
+  changed_when: false
+  when:
+    - patch_download_verify | bool
+    - not patch_download_dry_run | bool
+
+- name: Read the pin file
+  ansible.builtin.slurp:
+    src: "{{ patch_download_folder }}/au_patch.env"
+  register: patch_download_pin
+  when: not patch_download_dry_run | bool
+
+- name: Set the pinned patch list
+  ansible.builtin.set_fact:
+    patch_download_pinned_patch: >-
+      {{ patch_download_pin.content | b64decode
+         | regex_findall('(?m)^AU_PATCH="?([^"\n]*)"?') | first | default('') }}
+  when: not patch_download_dry_run | bool
+
+- name: Report the downloaded patch set
+  ansible.builtin.debug:
+    msg: "{{ patch_download_folder }}: AU_PATCH={{ patch_download_pinned_patch }}"
+  when: not patch_download_dry_run | bool

@@ -62,7 +62,7 @@ link: ## Link this checkout as oradba.automation into .collections
 # ==============================================================================
 
 .PHONY: lint
-lint: lint-version lint-yaml lint-ansible lint-markdown ## Run all linters
+lint: lint-version lint-ignored lint-yaml lint-ansible lint-markdown ## Run all linters
 
 .PHONY: lint-version
 lint-version: ## Check VERSION, galaxy.yml and CHANGELOG agree
@@ -70,6 +70,12 @@ lint-version: ## Check VERSION, galaxy.yml and CHANGELOG agree
 	[[ "$$gv" == "$(VERSION)" ]] || { echo "galaxy.yml version $$gv != VERSION $(VERSION)"; exit 1; }; \
 	grep -q "^## \[$(VERSION)\]" CHANGELOG.md || { echo "CHANGELOG.md has no section for $(VERSION)"; exit 1; }; \
 	echo "version $(VERSION) consistent"
+
+.PHONY: lint-ignored
+lint-ignored: ## Fail when .gitignore hides collection content (it would pass locally, break in CI)
+	@hidden=$$(git ls-files --others --ignored --exclude-standard -- roles playbooks examples extensions docs meta); \
+	[[ -z "$$hidden" ]] || { echo "ignored by .gitignore but part of the collection:"; echo "$$hidden"; exit 1; }; \
+	echo "no collection content hidden by .gitignore"
 
 .PHONY: lint-yaml
 lint-yaml: ## Run yamllint

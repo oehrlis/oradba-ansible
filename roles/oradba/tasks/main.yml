@@ -1,0 +1,40 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: roles/oradba/tasks/main.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.1.0
+# Purpose....: Validate the convention values. The role carries no other tasks;
+#              its purpose is defaults/main.yml.
+# Reference..: https://github.com/oehrlis/oradba-ansible
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Assert the OraDBA group dictionary names every required role
+  ansible.builtin.assert:
+    that:
+      - oradba_oracle_groups[item] is defined
+      - oradba_oracle_groups[item].name | default('') | length > 0
+      - oradba_oracle_groups[item].gid | default('') | string is match('^[0-9]+$')
+    fail_msg: >-
+      oradba_oracle_groups.{{ item }} needs name and a numeric gid. An override
+      replaces the whole dictionary - copy all seven entries from
+      roles/oradba/defaults/main.yml.
+    quiet: true
+  loop: "{{ oradba_required_group_roles }}"
+
+- name: Assert the layout paths are absolute
+  ansible.builtin.assert:
+    that:
+      - item is match('^/')
+    fail_msg: "Convention path {{ item }} is not absolute."
+    quiet: true
+  loop:
+    - "{{ oradba_oracle_root }}"
+    - "{{ oradba_oracle_data }}"
+    - "{{ oradba_oracle_arch }}"
+    - "{{ oradba_oracle_base }}"
+    - "{{ oradba_oracle_inventory }}"
+    - "{{ oradba_autoupgrade_base }}"

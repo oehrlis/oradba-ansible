@@ -1,0 +1,75 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: roles/oracle_user/tasks/main.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.1.0
+# Purpose....: Create the Oracle OS groups with fixed GIDs and the software
+#              owner with oinstall as primary and all OS groups as secondary.
+# Notes......: Compatible with the Preinstallation RPM: groups it already
+#              created with the same GID are left unchanged. A GID mismatch is
+#              reported, never "fixed" by changing the GID.
+# Reference..: https://github.com/oehrlis/oradba/blob/main/src/doc/conventions.md
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Read the existing groups
+  ansible.builtin.getent:
+    database: group
+
+- name: Collect groups that exist with a different GID
+  ansible.builtin.set_fact:
+    oracle_user_gid_mismatch: >-
+      {{ oracle_user_gid_mismatch | default([]) + [item.value.name ~ ' has gid '
+         ~ ansible_facts.getent_group[item.value.name][1] ~ ', expected ' ~ item.value.gid] }}
+  loop: "{{ oracle_user_groups | dict2items }}"
+  loop_control:
+    label: "{{ item.value.name }}"
+  when:
+    - item.value.name in ansible_facts.getent_group
+    - ansible_facts.getent_group[item.value.name][1] | string != item.value.gid | string
+
+- name: Fail on groups with an unexpected GID
+  ansible.builtin.fail:
+    msg: >-
+      GID mismatch: {{ oracle_user_gid_mismatch | join('; ') }}. GIDs must be
+      identical on all hosts that share files. Fix the host or set
+      oradba_oracle_groups to the site GIDs. To continue anyway, set
+      oracle_user_fail_on_gid_mismatch=false.
+  when:
+    - oracle_user_gid_mismatch | default([]) | length > 0
+    - oracle_user_fail_on_gid_mismatch | bool
+
+- name: Warn about groups that are left with their existing GID
+  ansible.builtin.debug:
+    msg: "WARN - left unchanged: {{ oracle_user_gid_mismatch | join('; ') }}"
+  when:
+    - oracle_user_gid_mismatch | default([]) | length > 0
+    - not oracle_user_fail_on_gid_mismatch | bool
+
+- name: Create the Oracle OS groups
+  become: true
+  ansible.builtin.group:
+    name: "{{ item.value.name }}"
+    gid: "{{ item.value.gid }}"
+    state: present
+  loop: "{{ oracle_user_groups | dict2items }}"
+  loop_control:
+    label: "{{ item.value.name }} ({{ item.value.gid }})"
+  when: item.value.name not in ansible_facts.getent_group
+
+- name: Create the software owner
+  become: true
+  ansible.builtin.user:
+    name: "{{ oracle_user_name }}"
+    uid: "{{ oracle_user_uid }}"
+    group: "{{ oracle_user_groups.inventory.name }}"
+    groups: "{{ oracle_user_groups | dict2items | rejectattr('key', 'equalto', 'inventory')
+                | map(attribute='value.name') | list }}"
+    append: true
+    home: "{{ oracle_user_home }}"
+    shell: "{{ oracle_user_shell }}"
+    create_home: true
+    state: present

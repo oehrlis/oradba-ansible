@@ -1,0 +1,34 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: roles/oracle_layout/tasks/main.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.1.0
+# Purpose....: Create the OraDBA filesystem layout: software root, data root,
+#              archive root, ORACLE_BASE and the central inventory directory.
+# Notes......: Does not create /etc/oraInst.loc - AutoUpgrade create_home
+#              registers the inventory from home_settings.inventory_location.
+#              Mount points are not managed here; a mounted volume keeps its
+#              content and only owner and mode are set.
+# Reference..: https://github.com/oehrlis/oradba/blob/main/src/doc/conventions.md
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Assert the software owner and group exist
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ oracle_layout_owner }}"
+
+- name: Create the OraDBA directories
+  become: true
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner | default(oracle_layout_owner) }}"
+    group: "{{ item.group | default(oracle_layout_group) }}"
+    mode: "{{ item.mode }}"
+  loop: "{{ oracle_layout_directories + oracle_layout_extra_directories }}"
+  loop_control:
+    label: "{{ item.path }}"

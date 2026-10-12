@@ -1,0 +1,79 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: roles/odb_autoupgrade_install/tasks/jar.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.1.0
+# Purpose....: Install or update autoupgrade.jar with bin/au_update_jar.sh.
+# Notes......: au_update_jar.sh does the sanity checks, version compare,
+#              downgrade protection and backup. "changed" is derived from the
+#              jar checksum before and after, not from the script output.
+# Reference..: https://github.com/oehrlis/odb_autoupgrade/blob/main/doc/keystore-and-jar.md
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Checksum the installed autoupgrade.jar
+  ansible.builtin.stat:
+    path: "{{ odb_autoupgrade_install_base }}/jar/autoupgrade.jar"
+    checksum_algorithm: sha256
+  register: odb_autoupgrade_install_jar_before
+
+- name: Report that the installed jar is kept
+  ansible.builtin.debug:
+    msg: >-
+      autoupgrade.jar present, not updated. Set odb_autoupgrade_install_jar_update=true
+      to run au_update_jar.sh (installs a newer build, never a downgrade).
+  when:
+    - odb_autoupgrade_install_jar_before.stat.exists
+    - not odb_autoupgrade_install_jar_update | bool
+
+- name: Install or update autoupgrade.jar
+  when: not odb_autoupgrade_install_jar_before.stat.exists or odb_autoupgrade_install_jar_update | bool
+  block:
+    - name: Copy autoupgrade.jar from the controller
+      become: true
+      ansible.builtin.copy:
+        src: "{{ odb_autoupgrade_install_jar_src }}"
+        dest: "{{ odb_autoupgrade_install_dist_dir }}/autoupgrade.jar"
+        owner: "{{ odb_autoupgrade_install_owner }}"
+        group: "{{ odb_autoupgrade_install_group }}"
+        mode: "0644"
+      when: odb_autoupgrade_install_jar_src | length > 0
+
+    - name: Build the au_update_jar.sh arguments
+      ansible.builtin.set_fact:
+        odb_autoupgrade_install_jar_args: >-
+          {{ ['--yes']
+             + (['--from', odb_autoupgrade_install_dist_dir ~ '/autoupgrade.jar']
+                if odb_autoupgrade_install_jar_src | length > 0 else [])
+             + (['--from', odb_autoupgrade_install_jar_url]
+                if odb_autoupgrade_install_jar_src | length == 0 and odb_autoupgrade_install_jar_url | length > 0
+                else [])
+             + (['--sha256', odb_autoupgrade_install_jar_sha256]
+                if odb_autoupgrade_install_jar_sha256 | length > 0 else []) }}
+
+    - name: Run au_update_jar.sh
+      become: true
+      become_user: "{{ odb_autoupgrade_install_owner }}"
+      ansible.builtin.command:
+        argv: "{{ [odb_autoupgrade_install_base ~ '/bin/au_update_jar.sh'] + odb_autoupgrade_install_jar_args }}"
+      register: odb_autoupgrade_install_jar_run
+      changed_when: false
+      retries: 3
+      delay: 10
+      until: odb_autoupgrade_install_jar_run is succeeded
+
+    - name: Checksum autoupgrade.jar after the update
+      ansible.builtin.stat:
+        path: "{{ odb_autoupgrade_install_base }}/jar/autoupgrade.jar"
+        checksum_algorithm: sha256
+      register: odb_autoupgrade_install_jar_after
+      changed_when: >-
+        odb_autoupgrade_install_jar_after.stat.checksum | default('')
+        != odb_autoupgrade_install_jar_before.stat.checksum | default('')
+
+    - name: Report the au_update_jar.sh result
+      ansible.builtin.debug:
+        msg: "{{ odb_autoupgrade_install_jar_run.stdout_lines + odb_autoupgrade_install_jar_run.stderr_lines }}"
