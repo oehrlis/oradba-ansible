@@ -1,0 +1,31 @@
+---
+# Generated from defaults/main.yml and reviewed; keep both in step.
+argument_specs:
+  main:
+    short_description: Stage a verified download folder on hosts without MOS access
+    options:
+      patch_stage_base:
+        type: str
+        description: Install directory of the engine.
+      patch_stage_owner:
+        type: str
+        description: Owner of the staged files.
+      patch_stage_group:
+        type: str
+        description: Group of the staged files.
+      patch_stage_profile:
+        type: str
+        description: Patch profile whose folder is staged.
+      patch_stage_folder:
+        type: str
+        description: Download folder on the targets (and on the download host).
+      patch_stage_src_dir:
+        type: str
+        description: Controller directory with the folder content.
+      patch_stage_fetch_from:
+        type: str
+        description: Inventory name of the download host to fetch the folder from; empty uses patch_stage_src_dir
+          as filled.
+      patch_stage_verify:
+        type: bool
+        description: Verify the staged folder with au_patch_verify.sh on every target.

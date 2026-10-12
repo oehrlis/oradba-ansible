@@ -1,0 +1,109 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: roles/autoupgrade_preflight/tasks/database.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.2.0
+# Purpose....: Preflight checks of one database: state, archivelog, home
+#              comparison and AutoUpgrade analyze.
+# Reference..: https://github.com/oehrlis/oradba-ansible
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Read the database state
+  ansible.builtin.include_role:
+    name: oradba.automation.oradba
+    tasks_from: db_state
+  vars:
+    oradba_db_sid: "{{ autoupgrade_preflight_db.sid | default(autoupgrade_preflight_db) }}"
+    oradba_db_home: "{{ autoupgrade_preflight_db.source_home | default('') }}"
+
+- name: Report a database that is already on the target home
+  ansible.builtin.debug:
+    msg: "{{ oradba_db_state.sid }} already runs from {{ oradba_target_home }} - nothing to check, switch skips it."
+  when: oradba_db_state.home == oradba_target_home
+
+- name: Check the database for the switch
+  when: oradba_db_state.home != oradba_target_home
+  block:
+    - name: Record database state findings
+      ansible.builtin.set_fact:
+        autoupgrade_preflight_findings: "{{ autoupgrade_preflight_findings + autoupgrade_preflight_db_findings }}"
+      vars:
+        autoupgrade_preflight_db_findings: >-
+          {{ ([oradba_db_state.sid ~ ': instance not running (status ' ~ oradba_db_state.status ~ ')']
+              if oradba_db_state.status not in ['OPEN', 'MOUNTED'] else [])
+             + ([oradba_db_state.sid ~ ': log_mode ' ~ oradba_db_state.log_mode | default('unknown')
+                 ~ ' - deploy needs ARCHIVELOG for its restore point']
+                if autoupgrade_preflight_require_archivelog | bool
+                   and oradba_db_state.log_mode | default('') != 'ARCHIVELOG' else []) }}
+
+    - name: Compare the target home with the source home
+      become: true
+      become_user: "{{ autoupgrade_preflight_owner }}"
+      ansible.builtin.command:
+        argv:
+          - "{{ autoupgrade_preflight_base }}/bin/au_home_verify.sh"
+          - --home
+          - "{{ oradba_target_home }}"
+          - --source-home
+          - "{{ oradba_db_state.home }}"
+          - --download-folder
+          - "{{ autoupgrade_preflight_folder }}"
+      register: autoupgrade_preflight_home_check
+      changed_when: false
+      failed_when: false
+      when:
+        - autoupgrade_preflight_verify_home | bool
+        - autoupgrade_preflight_target.stat.exists
+
+    - name: Record a home comparison failure
+      ansible.builtin.set_fact:
+        autoupgrade_preflight_findings: >-
+          {{ autoupgrade_preflight_findings + [oradba_db_state.sid ~ ': au_home_verify.sh rc '
+             ~ autoupgrade_preflight_home_check.rc ~ ' - '
+             ~ ((autoupgrade_preflight_home_check.stderr_lines + autoupgrade_preflight_home_check.stdout_lines)
+                | select('search', '(?i)fail|mismatch|error') | first | default('see output'))] }}
+      when:
+        - autoupgrade_preflight_home_check is not skipped
+        - autoupgrade_preflight_home_check.rc != 0
+
+    - name: Analyze the deploy of the database
+      become: true
+      become_user: "{{ autoupgrade_preflight_owner }}"
+      ansible.builtin.command:
+        argv: >-
+          {{ [autoupgrade_preflight_base ~ '/bin/au_run.sh']
+             + (['--dry-run'] if autoupgrade_preflight_dry_run | bool else [])
+             + ['--profile', autoupgrade_preflight_profile,
+                '-config', autoupgrade_preflight_base ~ '/etc/au_patch.cfg',
+                '-patch', '-mode', 'analyze', '-noconsole'] }}
+      environment: >-
+        {{ autoupgrade_preflight_environment | combine({
+             'AU_SID': oradba_db_state.sid,
+             'AU_SOURCE_HOME': oradba_db_state.home,
+             'AU_TARGET_HOME': oradba_target_home,
+             'AU_DOWNLOAD_FOLDER': autoupgrade_preflight_folder,
+             'AU_PROFILE_DIR': autoupgrade_preflight_profile_dir}) }}
+      register: autoupgrade_preflight_analyze_run
+      changed_when: false
+      failed_when: false
+      when: autoupgrade_preflight_analyze | bool
+
+    # A deploy that died leaves its job in the recovery store; analyze then
+    # refuses with "unfinished execution of a deploy mode". That is a pending
+    # resume, not a precheck failure (measured in oci-labs 2026-08-21).
+    - name: Record an analyze failure
+      ansible.builtin.set_fact:
+        autoupgrade_preflight_findings: >-
+          {{ autoupgrade_preflight_findings + [oradba_db_state.sid ~ ': analyze rc '
+             ~ autoupgrade_preflight_analyze_run.rc ~ ' - '
+             ~ ((autoupgrade_preflight_analyze_run.stderr_lines + autoupgrade_preflight_analyze_run.stdout_lines)
+                | select('search', '(?i)error|fail') | first | default('see engine logs'))] }}
+      when:
+        - autoupgrade_preflight_analyze_run is not skipped
+        - autoupgrade_preflight_analyze_run.rc != 0
+        - not ((autoupgrade_preflight_analyze_run.stderr | default('') ~ autoupgrade_preflight_analyze_run.stdout
+               | default('')) is search('unfinished execution of a deploy mode'))

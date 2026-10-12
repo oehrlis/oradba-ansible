@@ -67,3 +67,10 @@ oradba_oracle_home_prefix: product
 # format belongs to odb_autoupgrade, the content to the site (rules 5 and 8).
 oradba_patch_profile: recommended
 oradba_patch_profile_dir: "{{ oradba_autoupgrade_base }}/profiles"
+
+# Patch apply: databases of a host (SID strings or {sid: X, source_home: Y};
+# source_home defaults to the oratab entry) and the target home (empty =
+# derived from patches_info.json of the profile folder). Set per host in
+# host_vars - a site list, never in this repository.
+oradba_patch_databases: []
+oradba_patch_target_home: ""

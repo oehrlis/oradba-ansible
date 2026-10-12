@@ -1,0 +1,51 @@
+---
+# Generated from defaults/main.yml and reviewed; keep both in step.
+argument_specs:
+  main:
+    short_description: Patch preflight checks through the odb_autoupgrade engine (analyze mode)
+    options:
+      autoupgrade_preflight_base:
+        type: str
+        description: Install directory of the engine.
+      autoupgrade_preflight_owner:
+        type: str
+        description: User that runs the engine.
+      autoupgrade_preflight_profile:
+        type: str
+        description: Patch profile; must match download and create_home.
+      autoupgrade_preflight_profile_dir:
+        type: str
+        description: Directory on the target for site profiles (AU_PROFILE_DIR).
+      autoupgrade_preflight_folder:
+        type: str
+        description: Download folder of the profile.
+      autoupgrade_preflight_databases:
+        type: str
+        description: Databases to check, same format as oradba_patch_databases.
+      autoupgrade_preflight_target_home:
+        type: str
+        description: Target Oracle Home; empty derives it from patches_info.json.
+      autoupgrade_preflight_min_free_gb:
+        type: int
+        description: Minimum free space in GB on the filesystem of the target home.
+      autoupgrade_preflight_verify_folder:
+        type: bool
+        description: Verify the download folder with au_patch_verify.sh.
+      autoupgrade_preflight_verify_home:
+        type: bool
+        description: Compare the target home with each source home (au_home_verify.sh).
+      autoupgrade_preflight_analyze:
+        type: bool
+        description: Run au_run.sh -mode analyze per database.
+      autoupgrade_preflight_connectivity:
+        type: bool
+        description: Check MOS connectivity with au_check_connectivity.sh (download hosts).
+      autoupgrade_preflight_require_archivelog:
+        type: bool
+        description: Require ARCHIVELOG, which the deploy restore point needs.
+      autoupgrade_preflight_dry_run:
+        type: bool
+        description: Pass --dry-run to au_run.sh for the analyze step.
+      autoupgrade_preflight_environment:
+        type: dict
+        description: Extra caller environment for the engine; no secrets.

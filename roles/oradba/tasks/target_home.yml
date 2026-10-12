@@ -1,0 +1,65 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: roles/oradba/tasks/target_home.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.2.0
+# Purpose....: Determine the target Oracle Home of a patch set: explicit value or
+#              derived from patches_info.json (home naming convention:
+#              <ORACLE_BASE>/product/<releaseUpdate in four parts>).
+# Notes......: Inputs: oradba_target_home_folder (download folder), optional
+#              oradba_target_home_explicit, optional oradba_target_home_base.
+#              Output: fact oradba_target_home. The database RU entry wins; any
+#              other entry with releaseUpdate is the fallback. No match is
+#              fatal - never a guessed path.
+#              Called with include_role tasks_from: target_home.
+# Reference..: https://github.com/oehrlis/oradba-ansible
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Use the explicit target home
+  ansible.builtin.set_fact:
+    oradba_target_home: "{{ oradba_target_home_explicit }}"
+  when: oradba_target_home_explicit | default("") | length > 0
+
+- name: Derive the target home from patches_info.json
+  when: oradba_target_home_explicit | default("") | length == 0
+  block:
+    - name: Read patches_info.json
+      ansible.builtin.slurp:
+        src: "{{ oradba_target_home_folder }}/patches_info.json"
+      register: oradba_target_home_patches_info
+
+    - name: Select the release update
+      ansible.builtin.set_fact:
+        oradba_target_home_ru: >-
+          {{ ((oradba_target_home_ru_patches | selectattr('description', 'defined')
+               | selectattr('description', 'search', '(?i)database release update')
+               | map(attribute='releaseUpdate') | list)
+              + (oradba_target_home_ru_patches | map(attribute='releaseUpdate') | list))
+             | select | first | default('') }}
+      vars:
+        oradba_target_home_ru_patches: >-
+          {{ (oradba_target_home_patches_info.content | b64decode | from_json).patches | default([])
+             | selectattr('releaseUpdate', 'defined') | list }}
+
+    - name: Assert a release update was found
+      ansible.builtin.assert:
+        that:
+          - oradba_target_home_ru is match('^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
+        fail_msg: >-
+          No releaseUpdate in {{ oradba_target_home_folder }}/patches_info.json
+          (found "{{ oradba_target_home_ru }}"). Set the target home explicitly.
+        quiet: true
+
+    - name: Set the target home from the release update
+      ansible.builtin.set_fact:
+        oradba_target_home: >-
+          {{ oradba_target_home_base | default(oradba_oracle_base, true) }}/{{ oradba_oracle_home_prefix }}/{{
+             (oradba_target_home_ru.split('.'))[:4] | join('.') }}
+
+- name: Report the target home
+  ansible.builtin.debug:
+    msg: "Target home: {{ oradba_target_home }}"

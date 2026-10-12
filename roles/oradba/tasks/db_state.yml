@@ -1,0 +1,96 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: roles/oradba/tasks/db_state.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.2.0
+# Purpose....: Read the state of one database with a single sqlplus call and the
+#              oratab entry of its SID; result in the fact oradba_db_state.
+# Notes......: Inputs: oradba_db_sid, optional oradba_db_home (default: oratab
+#              home of the SID), optional oradba_db_owner. Usable on open,
+#              mounted and stopped instances: queries that need an open database
+#              fail quietly in mount mode and their keys are absent; a stopped
+#              instance gives status DOWN. Read-only.
+#              Called with include_role tasks_from: db_state.
+# Reference..: https://github.com/oehrlis/oradba-ansible
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Read the oratab entry of {{ oradba_db_sid }}
+  ansible.builtin.slurp:
+    src: /etc/oratab
+  register: oradba_db_oratab
+  failed_when: false
+
+- name: Set the oratab home of {{ oradba_db_sid }}
+  ansible.builtin.set_fact:
+    oradba_db_oratab_entry: >-
+      {{ ((oradba_db_oratab.content | default('') | b64decode).splitlines()
+          | select('match', '^' ~ (oradba_db_sid | regex_escape) ~ ':')
+          | first | default('')).split(':') }}
+
+- name: Set the home used for {{ oradba_db_sid }}
+  ansible.builtin.set_fact:
+    oradba_db_home_used: >-
+      {{ oradba_db_home | default('', true) or (oradba_db_oratab_entry[1] | default('')) }}
+
+- name: Assert a home is known for {{ oradba_db_sid }}
+  ansible.builtin.assert:
+    that:
+      - oradba_db_home_used | length > 0
+    fail_msg: "No Oracle Home for {{ oradba_db_sid }}: not in /etc/oratab and no home given."
+    quiet: true
+
+- name: Query the state of {{ oradba_db_sid }}
+  become: true
+  become_user: "{{ oradba_db_owner | default(oradba_oracle_user) }}"
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      "${ORACLE_HOME}/bin/sqlplus" -s -L / as sysdba <<'SQL' | grep -E '^[a-z_]+=' || true
+      set heading off feedback off pagesize 0 linesize 400 trimspool on verify off
+      whenever sqlerror continue
+      select 'status=' || status from v$instance;
+      select 'version=' || version_full from v$instance;
+      select 'role=' || database_role from v$database;
+      select 'open_mode=' || open_mode from v$database;
+      select 'log_mode=' || log_mode from v$database;
+      select 'flashback=' || flashback_on from v$database;
+      select 'cdb=' || cdb from v$database;
+      select 'dg_config=' || count(*) from v$dataguard_config;
+      select 'broker=' || upper(value) from v$parameter where name = 'dg_broker_start';
+      select 'mrp=' || count(*) from v$dataguard_process where name like 'MRP%';
+      select 'grp_count=' || count(*) from v$restore_point where guarantee_flashback_database = 'YES';
+      select 'grp_name=' || name from (select name from v$restore_point
+        where guarantee_flashback_database = 'YES' order by scn desc) where rownum = 1;
+      select 'invalid_objects=' || count(*) from dba_objects where status <> 'VALID';
+      select 'invalid_components=' || count(*) from dba_registry where status not in ('VALID', 'OPTION OFF');
+      select 'sqlpatch=' || description || ' ' || action || ' ' || status from (select description, action,
+        status from dba_registry_sqlpatch order by action_time desc) where rownum = 1;
+      exit
+      SQL
+    executable: /bin/bash
+  environment:
+    ORACLE_HOME: "{{ oradba_db_home_used }}"
+    ORACLE_SID: "{{ oradba_db_sid }}"
+    ORACLE_BASE: "{{ oradba_oracle_base }}"
+  register: oradba_db_query
+  changed_when: false
+
+- name: Set the state of {{ oradba_db_sid }}
+  ansible.builtin.set_fact:
+    oradba_db_state: >-
+      {{ {'status': 'DOWN'}
+         | combine(dict(oradba_db_query.stdout_lines | select('match', '^[a-z_]+=') | map('split', '=', 1)))
+         | combine({'sid': oradba_db_sid, 'home': oradba_db_home_used,
+                    'oratab_home': oradba_db_oratab_entry[1] | default(''),
+                    'oratab_autostart': oradba_db_oratab_entry[2] | default('')}) }}
+
+- name: Report the state of {{ oradba_db_sid }}
+  ansible.builtin.debug:
+    msg: >-
+      {{ oradba_db_sid }}: {{ oradba_db_state.status }} {{ oradba_db_state.role | default('-') }}
+      {{ oradba_db_state.open_mode | default('-') }} {{ oradba_db_state.version | default('-') }}
+      from {{ oradba_db_state.home }}
