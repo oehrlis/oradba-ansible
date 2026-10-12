@@ -1,0 +1,25 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: playbooks/patch_download.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.1.0
+# Purpose....: Download a patch set by profile on the download hosts.
+# Notes......: Run: ansible-playbook oradba.automation.patch_download -i <inventory>
+#                -e oradba_patch_profile=19.32
+#              Needs site_setup with a keystore. Only hosts with
+#              oradba_download_host=true are used.
+# Reference..: https://github.com/oehrlis/oradba-ansible
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Download a patch set
+  hosts: "{{ oradba_playbook_hosts | default('all') }}"
+  gather_facts: false
+  tasks:
+    - name: Download through the engine
+      ansible.builtin.include_role:
+        name: oradba.automation.patch_download
+      when: oradba_download_host | default(false) | bool

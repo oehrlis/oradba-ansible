@@ -1,0 +1,45 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: roles/oracle_layout/defaults/main.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.1.0
+# Purpose....: Defaults for the OraDBA filesystem layout.
+# Reference..: https://github.com/oehrlis/oradba-ansible
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+oracle_layout_owner: "{{ oradba_oracle_user }}"
+oracle_layout_group: "{{ oradba_oracle_groups.inventory.name }}"
+
+# Directories owned by the software owner. Roots (/u00, /u01, /u02) are
+# included so that a later dedicated volume can be mounted without a path
+# change; their mode is 0755, everything below follows the list.
+oracle_layout_directories:
+  - path: "{{ oradba_oracle_root }}"
+    mode: "0755"
+  - path: "{{ oradba_oracle_data }}"
+    mode: "0755"
+  - path: "{{ oradba_oracle_arch }}"
+    mode: "0755"
+  - path: "{{ oradba_oracle_root }}/app"
+    mode: "0755"
+  - path: "{{ oradba_oracle_base }}"
+    mode: "0755"
+  - path: "{{ oradba_oracle_base }}/{{ oradba_oracle_home_prefix }}"
+    mode: "0755"
+  - path: "{{ oradba_oracle_base }}/local"
+    mode: "0755"
+  - path: "{{ oradba_oracle_inventory }}"
+    mode: "0770"
+  - path: "{{ oradba_oradata_dir }}"
+    mode: "0750"
+  - path: "{{ oradba_archive_dir }}"
+    mode: "0750"
+  - path: "{{ oradba_fra_dir }}"
+    mode: "0750"
+
+# Additional site directories, same format; appended to the list above
+oracle_layout_extra_directories: []

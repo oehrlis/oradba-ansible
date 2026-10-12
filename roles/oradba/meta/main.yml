@@ -1,0 +1,16 @@
+---
+galaxy_info:
+  author: Stefan Oehrli
+  description: OraDBA conventions (layout, user, groups, home naming) as overridable defaults
+  company: OraDBA
+  license: Apache-2.0
+  min_ansible_version: "2.16"
+  platforms:
+    - name: EL
+      versions:
+        - "8"
+        - "9"
+  galaxy_tags:
+    - oracle
+    - conventions
+dependencies: []

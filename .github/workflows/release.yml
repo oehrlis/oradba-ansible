@@ -1,0 +1,45 @@
+---
+name: Release
+
+"on":
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish the collection
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install tooling
+        run: |
+          make setup
+          npm install -g markdownlint-cli
+      - name: Verify tag and VERSION agree
+        run: |
+          tag="${GITHUB_REF#refs/tags/v}"
+          file="$(tr -d '[:space:]' < VERSION)"
+          [ "$tag" = "$file" ] || { echo "tag $tag != VERSION $file"; exit 1; }
+      - name: Lint
+        run: make ci
+      - name: Build
+        run: make build
+      - name: Extract release notes
+        run: |
+          v="$(cat VERSION)"
+          awk -v v="$v" '$0 ~ "^## \\[" v "\\]" {f=1; next} /^## \[/ {f=0} f' CHANGELOG.md > release_notes.md
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: oradba.automation ${{ github.ref_name }}
+          body_path: release_notes.md
+          files: |
+            dist/oradba-automation-*.tar.gz
+            dist/oradba-automation-*.tar.gz.sha256

@@ -1,0 +1,46 @@
+---
+# Generated from defaults/main.yml and reviewed; keep both in step.
+argument_specs:
+  main:
+    short_description: Patch download by profile through the odb_autoupgrade engine
+    options:
+      patch_download_base:
+        type: str
+        description: Install directory of the engine.
+      patch_download_owner:
+        type: str
+        description: User that runs the engine.
+      patch_download_profile:
+        type: str
+        description: Patch profile (shipped name, site profile name or absolute path on the target).
+      patch_download_profile_dir:
+        type: str
+        description: Directory on the target for site profiles (AU_PROFILE_DIR).
+      patch_download_profiles:
+        type: list
+        description: Controller paths of *.profile files to copy into patch_download_profile_dir.
+        elements: str
+      patch_download_folder:
+        type: str
+        description: Download folder (AU_DOWNLOAD_FOLDER); one folder per profile.
+      patch_download_environment:
+        type: dict
+        description: Extra caller environment for the engine, for example AUTOUPGRADE_PROXY; no secrets.
+      patch_download_force:
+        type: bool
+        description: Download again although the folder carries a pin file.
+      patch_download_resolve_mrp:
+        type: bool
+        description: Write the MRP as plain patch number into the pin file (reproducible CPU-test sets).
+      patch_download_verify:
+        type: bool
+        description: Verify size and sha256 of every downloaded file with au_patch_verify.sh.
+      patch_download_dry_run:
+        type: bool
+        description: Pass --dry-run to au_run.sh; prints the rendered config, downloads nothing.
+      patch_download_async_timeout:
+        type: int
+        description: Maximum run time of the download in seconds.
+      patch_download_async_poll:
+        type: int
+        description: Poll interval of the download in seconds.

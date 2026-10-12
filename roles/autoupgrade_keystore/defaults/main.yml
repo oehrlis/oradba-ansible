@@ -1,0 +1,37 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: roles/autoupgrade_keystore/defaults/main.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.1.0
+# Purpose....: Defaults for the MOS keystore on a download host.
+# Notes......: Secrets have no default. Supply them from Ansible Vault or a
+#              lookup at run time, e.g. 1Password:
+#                lookup('community.general.onepassword', 'MOS', field='password')
+#              Never put them in inventory files of a public repository.
+# Reference..: https://github.com/oehrlis/odb_autoupgrade/blob/main/doc/keystore-and-jar.md
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+autoupgrade_keystore_base: "{{ oradba_autoupgrade_base }}"
+autoupgrade_keystore_owner: "{{ oradba_oracle_user }}"
+autoupgrade_keystore_dir: "{{ autoupgrade_keystore_base }}/keystore"
+
+# Credentials (secrets: no defaults, no_log everywhere they are used)
+autoupgrade_keystore_mos_user: ""
+autoupgrade_keystore_mos_password: ""
+autoupgrade_keystore_password: ""
+
+# YES = local auto-login, host-bound (default, one keystore per download host)
+# SHARED = portable auto-login (treat the files as a copyable credential)
+# NO = no auto-login (interactive use only, not usable from Ansible downloads)
+autoupgrade_keystore_auto_login: "YES"
+
+# Recreate an existing keystore (au_keystore.sh --force --yes; backup first)
+autoupgrade_keystore_force: false
+# Run the non-interactive check after create or on an existing keystore
+autoupgrade_keystore_check: true
+# Pass --dry-run to the engine (no keystore is written)
+autoupgrade_keystore_dry_run: false

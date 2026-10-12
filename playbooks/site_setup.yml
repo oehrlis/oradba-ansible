@@ -1,0 +1,36 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: playbooks/site_setup.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.1.0
+# Purpose....: Prepare Oracle hosts: groups, user, layout, engine; keystore on download hosts.
+# Notes......: Run: ansible-playbook oradba.automation.site_setup -i <inventory>
+#              Hosts: oradba_playbook_hosts (default all). Download hosts set
+#              oradba_download_host=true and supply the keystore secrets.
+# Reference..: https://github.com/oehrlis/oradba-ansible
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Prepare Oracle hosts
+  hosts: "{{ oradba_playbook_hosts | default('all') }}"
+  gather_facts: true
+  tasks:
+    - name: Create the Oracle OS groups and the software owner
+      ansible.builtin.include_role:
+        name: oradba.automation.oracle_user
+
+    - name: Create the filesystem layout
+      ansible.builtin.include_role:
+        name: oradba.automation.oracle_layout
+
+    - name: Install the odb_autoupgrade engine
+      ansible.builtin.include_role:
+        name: oradba.automation.odb_autoupgrade_install
+
+    - name: Create the MOS keystore on download hosts
+      ansible.builtin.include_role:
+        name: oradba.automation.autoupgrade_keystore
+      when: oradba_download_host | default(false) | bool

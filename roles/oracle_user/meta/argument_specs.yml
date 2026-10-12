@@ -1,0 +1,26 @@
+---
+# Generated from defaults/main.yml and reviewed; keep both in step.
+argument_specs:
+  main:
+    short_description: Oracle OS groups with fixed GIDs and the software owner
+    options:
+      oracle_user_name:
+        type: str
+        description: Software owner to create.
+      oracle_user_uid:
+        type: int
+        description: UID of the software owner.
+      oracle_user_groups:
+        type: dict
+        description: OS groups to create, same format as oradba_oracle_groups; inventory is the primary
+          group.
+      oracle_user_home:
+        type: str
+        description: Home directory of the software owner.
+      oracle_user_shell:
+        type: str
+        description: Login shell of the software owner.
+      oracle_user_fail_on_gid_mismatch:
+        type: bool
+        description: Fail when a group exists with a different GID (true) or leave it unchanged with a
+          warning (false).

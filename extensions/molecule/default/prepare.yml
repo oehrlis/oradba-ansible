@@ -1,0 +1,10 @@
+---
+- name: Prepare the containers
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Install Python and sudo (raw, before Python exists)
+      ansible.builtin.raw: >-
+        dnf -y -q install {{ 'python3.11' if 'ol8' in group_names else 'python3' }} sudo
+      register: prepare_raw
+      changed_when: "'Nothing to do' not in prepare_raw.stdout"

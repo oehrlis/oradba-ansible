@@ -1,0 +1,43 @@
+---
+# Generated from defaults/main.yml and reviewed; keep both in step.
+argument_specs:
+  main:
+    short_description: MOS keystore for AutoUpgrade downloads through the odb_autoupgrade engine
+    options:
+      autoupgrade_keystore_base:
+        type: str
+        description: Install directory of the engine.
+      autoupgrade_keystore_owner:
+        type: str
+        description: Owner of the keystore; the engine runs as this user.
+      autoupgrade_keystore_dir:
+        type: str
+        description: Keystore directory (AU_KEYSTORE).
+      autoupgrade_keystore_mos_user:
+        type: str
+        description: My Oracle Support user name.
+      autoupgrade_keystore_mos_password:
+        type: str
+        description: My Oracle Support password (secret, from Vault or a lookup).
+        no_log: true
+      autoupgrade_keystore_password:
+        type: str
+        description: Keystore password (secret, from Vault or a lookup).
+        no_log: true
+      autoupgrade_keystore_auto_login:
+        type: str
+        description: YES local auto-login (host-bound), SHARED portable auto-login, NO no auto-login (not
+          usable from Ansible).
+        choices:
+          - 'YES'
+          - SHARED
+          - 'NO'
+      autoupgrade_keystore_force:
+        type: bool
+        description: Recreate an existing keystore (the engine backs it up first).
+      autoupgrade_keystore_check:
+        type: bool
+        description: Run au_keystore.sh --check after create or on an existing keystore.
+      autoupgrade_keystore_dry_run:
+        type: bool
+        description: Pass --dry-run to au_keystore.sh; no keystore is written.

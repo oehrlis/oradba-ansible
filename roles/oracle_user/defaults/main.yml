@@ -1,0 +1,25 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: roles/oracle_user/defaults/main.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.1.0
+# Purpose....: Defaults for the OS groups and the software owner.
+# Notes......: Values come from the oradba role (conventions). Override the
+#              oradba_* variable for a site, the oracle_user_* variable only for
+#              a deviation of this role.
+# Reference..: https://github.com/oehrlis/oradba-ansible
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+oracle_user_name: "{{ oradba_oracle_user }}"
+oracle_user_uid: "{{ oradba_oracle_uid }}"
+oracle_user_groups: "{{ oradba_oracle_groups }}"
+oracle_user_home: "/home/{{ oracle_user_name }}"
+oracle_user_shell: /bin/bash
+
+# Existing group with a different GID: fail (default) or leave it alone with a
+# warning. Changing a GID in place would orphan every file of the old GID.
+oracle_user_fail_on_gid_mismatch: true

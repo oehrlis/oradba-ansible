@@ -1,0 +1,45 @@
+---
+name: CI
+
+"on":
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint and syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install tooling
+        run: |
+          make setup
+          npm install -g markdownlint-cli
+      - name: Lint and syntax check
+        run: make ci
+
+  molecule:
+    name: Molecule ${{ matrix.platform }}
+    runs-on: ubuntu-latest
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [oradba-ol8, oradba-ol9]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Install tooling
+        run: make setup
+      - name: Run molecule
+        run: make molecule MOLECULE_ARGS="--platform-name ${{ matrix.platform }}"
