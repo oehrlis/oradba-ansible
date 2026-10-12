@@ -1,0 +1,27 @@
+.DS_Store
+*.swp
+*.tmp
+*.log
+dist/
+*.tar.gz
+.venv/
+.collections/
+.ansible/
+.cache/
+__pycache__/
+# aitk-managed - do not commit (deployed from ai-toolkit)
+.claude/skills/
+.claude/rules/
+.claude/commands/
+.claude/agents/
+.claude/worktrees/
+.github/copilot-instructions.md
+# Local working material - never commit
+tasks/
+ref/
+# Site data never belongs here (maintenance rule 8)
+inventory/
+*.vault.yml
+*.p12
+*.sso
+*.zip
