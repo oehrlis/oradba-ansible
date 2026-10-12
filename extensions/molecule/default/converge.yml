@@ -31,13 +31,14 @@
       ansible.builtin.include_role:
         name: oradba.automation.patch_download
 
-    # Stand-in for a finished download: patches_info.json drives the home name
+    # Stand-in for a finished download. Literal paths: include_role does not
+    # expose the oradba_* defaults to the play.: patches_info.json drives the home name
     - name: Place the patches_info.json fixture
       become: true
       ansible.builtin.copy:
         src: patches_info.json
-        dest: "{{ oradba_autoupgrade_base }}/patches/recommended/patches_info.json"
-        owner: "{{ oradba_oracle_user }}"
+        dest: /u00/app/oracle/local/odb_autoupgrade/patches/recommended/patches_info.json
+        owner: oracle
         mode: "0644"
 
     - name: Run oracle_home_create

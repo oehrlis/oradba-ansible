@@ -30,8 +30,8 @@ argument_specs:
         description: Directory on the target that keeps the release tarball and a transferred jar.
       odb_autoupgrade_install_packages:
         type: list
-        description: Runtime packages (Java 8 or 11, expect, acl, tar, gzip, unzip, curl); empty list
-          skips the package step.
+        description: Runtime packages (Java 8 or 11, expect, gettext, acl, tar, gzip, unzip, curl); empty
+          list skips the package step.
         elements: str
       odb_autoupgrade_install_jar_src:
         type: str

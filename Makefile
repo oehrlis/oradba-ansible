@@ -47,6 +47,10 @@ $(BIN)/ansible-lint: requirements-dev.txt
 	uv pip install -q -p $(BIN)/python -r requirements-dev.txt
 	@touch $@
 
+.PHONY: deps
+deps: link ## Install the molecule-only collections into .collections
+	$(BIN)/ansible-galaxy collection install -r extensions/molecule/requirements.yml -p $(COLLECTIONS)
+
 .PHONY: link
 link: ## Link this checkout as oradba.automation into .collections
 	@mkdir -p $(dir $(COLL_LINK))
@@ -91,11 +95,11 @@ syntax: link ## Syntax-check the playbooks
 # ==============================================================================
 
 .PHONY: molecule
-molecule: link ## Run the molecule default scenario (OL8 and OL9)
+molecule: deps ## Run the molecule default scenario (OL8 and OL9)
 	cd extensions && ../$(BIN)/molecule test -s default $(MOLECULE_ARGS)
 
 .PHONY: molecule-converge
-molecule-converge: link ## Converge only, keep containers for debugging
+molecule-converge: deps ## Converge only, keep containers for debugging
 	cd extensions && ../$(BIN)/molecule converge -s default
 
 .PHONY: molecule-destroy

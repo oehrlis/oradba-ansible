@@ -10,7 +10,8 @@
 # Notes......: Real engine release and real autoupgrade.jar; keystore, download
 #              and create_home run in engine dry-run mode (no MOS access, no
 #              Oracle software in CI). Select one platform with
-#              MOLECULE_PLATFORM=ol8|ol9 via make molecule-ol8 / molecule-ol9.
+#              MOLECULE_ARGS="--platform-name oradba-ol8" (CI matrix).
+#              ANSIBLE_COLLECTIONS_PATH comes from the Makefile (.collections).
 # Reference..: https://github.com/oehrlis/oradba-ansible
 # License....: Apache License Version 2.0
 # ------------------------------------------------------------------------------
@@ -35,8 +36,10 @@ platforms:
       - ol9
 provisioner:
   name: ansible
-  env:
-    ANSIBLE_COLLECTIONS_PATH: ${MOLECULE_PROJECT_DIRECTORY}/.collections:${HOME}/.ansible/collections
+  config_options:
+    connection:
+      # Fewer file transfers into the containers (docker cp is flaky under load)
+      pipelining: true
   inventory:
     group_vars:
       ol8:

@@ -74,36 +74,50 @@
       register: verify_ewallet
       failed_when: verify_ewallet.stat.exists
 
-    - name: Render the create_home config through the engine
+    # au_run.sh --dry-run prints only the java command line, so the config is
+    # rendered with the engine generator and the environment oracle_home_create
+    # passes without a source home.
+    - name: Render a create_home config through the engine
       become: true
       become_user: oracle
       ansible.builtin.command:
         argv:
-          - "{{ verify_base }}/bin/au_run.sh"
-          - --dry-run
-          - --profile
-          - recommended
-          - -config
-          - "{{ verify_base }}/etc/au_patch.cfg"
-          - -patch
-          - -mode
-          - create_home
-          - -noconsole
+          - "{{ verify_base }}/bin/au_gen_config.sh"
+          - --ru
+          - "19.32"
+          - --oracle-base
+          - /u00/app/oracle
+          - --edition
+          - EE
+          - --inventory
+          - /u00/app/oraInventory
+          - --inventory-group
+          - oinstall
+          - --output
+          - /tmp/verify_create_home.cfg
+          - --force
+        chdir: /tmp
       environment:
-        AU_TARGET_HOME: /u00/app/oracle/product/19.32.0.0
-        AU_ORACLE_BASE: /u00/app/oracle
-        AU_EDITION: EE
-        AU_INVENTORY_LOCATION: /u00/app/oraInventory
-        AU_INVENTORY_GROUP: oinstall
-      register: verify_render
+        AU_GROUP_OSDBA: dba
+        AU_GROUP_OSOPER: oper
+        AU_GROUP_OSBACKUPDBA: backupdba
+        AU_GROUP_OSDGDBA: dgdba
+        AU_GROUP_OSKMDBA: kmdba
+        AU_GROUP_OSRACDBA: racdba
       changed_when: false
+
+    - name: Read the rendered config
+      ansible.builtin.slurp:
+        src: /tmp/verify_create_home.cfg
+      register: verify_render
 
     - name: Assert the rendered config follows the conventions
       ansible.builtin.assert:
         that:
-          - "'patch1.target_home=/u00/app/oracle/product/19.32.0.0' in verify_output"
-          - "'patch1.home_settings.osdba_group=dba' in verify_output"
-          - "'patch1.home_settings.inventory_group=oinstall' in verify_output"
-          - "'global.keystore' not in verify_output"
+          - "'patch1.target_home=/u00/app/oracle/product/19.32.0.0' in verify_lines"
+          - "'patch1.home_settings.osdba_group=dba' in verify_lines"
+          - "'patch1.home_settings.osracdba_group=racdba' in verify_lines"
+          - "'patch1.home_settings.inventory_group=oinstall' in verify_lines"
+          - verify_lines | select('match', '^global[.]keystore') | list | length == 0
       vars:
-        verify_output: "{{ verify_render.stdout ~ verify_render.stderr }}"
+        verify_lines: "{{ (verify_render.content | b64decode).splitlines() }}"

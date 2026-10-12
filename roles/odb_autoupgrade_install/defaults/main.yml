@@ -29,10 +29,12 @@ odb_autoupgrade_install_group: "{{ oradba_oracle_groups.inventory.name }}"
 odb_autoupgrade_install_dist_dir: "{{ oradba_oracle_base }}/local/.dist"
 
 # Runtime dependencies: Java 8 or 11 for AutoUpgrade, expect for the keystore
-# console, acl for become_user to the unprivileged owner. Empty list = skip.
+# console, gettext (envsubst) for the config rendering, acl for become_user to
+# the unprivileged owner. Empty list = skip.
 odb_autoupgrade_install_packages:
   - java-11-openjdk-headless
   - expect
+  - gettext
   - acl
   - tar
   - gzip
