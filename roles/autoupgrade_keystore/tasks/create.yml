@@ -76,9 +76,13 @@
   rescue:
     - name: Report the failed keystore creation
       ansible.builtin.fail:
+        # Name the task that failed: it is not always the engine call (pass
+        # file transfer, temp directory), and its message is no secret.
         msg: >-
-          au_keystore.sh --create failed (rc {{ autoupgrade_keystore_create.rc | default('n/a') }}):
-          {{ (autoupgrade_keystore_create.stderr_lines | default([]))[-15:] }}
+          Keystore creation failed in task "{{ ansible_failed_task.name | default('?') }}":
+          {{ (autoupgrade_keystore_create.stderr_lines | default([]))[-15:]
+             if autoupgrade_keystore_create.rc is defined
+             else (ansible_failed_result.msg | default('no message')) }}
 
   always:
     - name: Remove the pass files

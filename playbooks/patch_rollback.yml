@@ -1,0 +1,54 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: playbooks/patch_rollback.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.2.0
+# Purpose....: Roll databases back to the home they ran from before patch_apply.
+# Notes......: Run: ansible-playbook oradba.automation.patch_rollback -i <inventory>
+#                -e oracle_home_rollback_mode=home      (or restore)
+#              The mode has no default. Order: primaries, databases without
+#              Data Guard, standbys (oradba_rollback_phases to change it).
+#              Check MOS 1265700.1 for the Data Guard order of your patch.
+#              NOT YET RUN AGAINST A REAL DATABASE (v0.2.0).
+# Reference..: https://github.com/oehrlis/oradba-ansible
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Roll back in the first phase
+  hosts: "{{ oradba_playbook_hosts | default('all') }}"
+  gather_facts: false
+  any_errors_fatal: true
+  serial: "{{ oradba_patch_serial | default(1) }}"
+  tasks:
+    - name: Roll back phase {{ (oradba_rollback_phases | default(['primary', 'standalone', 'standby']))[0] }}
+      ansible.builtin.include_role:
+        name: oradba.automation.oracle_home_rollback
+      vars:
+        oracle_home_rollback_phase: "{{ (oradba_rollback_phases | default(['primary', 'standalone', 'standby']))[0] }}"
+
+- name: Roll back in the second phase
+  hosts: "{{ oradba_playbook_hosts | default('all') }}"
+  gather_facts: false
+  any_errors_fatal: true
+  serial: "{{ oradba_patch_serial | default(1) }}"
+  tasks:
+    - name: Roll back phase {{ (oradba_rollback_phases | default(['primary', 'standalone', 'standby']))[1] }}
+      ansible.builtin.include_role:
+        name: oradba.automation.oracle_home_rollback
+      vars:
+        oracle_home_rollback_phase: "{{ (oradba_rollback_phases | default(['primary', 'standalone', 'standby']))[1] }}"
+
+- name: Roll back in the third phase
+  hosts: "{{ oradba_playbook_hosts | default('all') }}"
+  gather_facts: false
+  any_errors_fatal: true
+  serial: "{{ oradba_patch_serial | default(1) }}"
+  tasks:
+    - name: Roll back phase {{ (oradba_rollback_phases | default(['primary', 'standalone', 'standby']))[2] }}
+      ansible.builtin.include_role:
+        name: oradba.automation.oracle_home_rollback
+      vars:
+        oracle_home_rollback_phase: "{{ (oradba_rollback_phases | default(['primary', 'standalone', 'standby']))[2] }}"

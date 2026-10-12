@@ -50,3 +50,12 @@ argument_specs:
       oradba_patch_profile_dir:
         type: str
         description: Directory on the target for site profiles (AU_PROFILE_DIR).
+      oradba_patch_databases:
+        type: list
+        description: Databases of the host to patch, as SID strings or dicts with sid and optional source_home
+          (default from /etc/oratab).
+        elements: str
+      oradba_patch_target_home:
+        type: str
+        description: Target Oracle Home of the patch; empty derives it from patches_info.json of the profile
+          folder.

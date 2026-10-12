@@ -1,0 +1,130 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: roles/oracle_home_switch/tasks/database.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.2.0
+# Purpose....: Switch one database to the target home.
+# Reference..: https://github.com/oehrlis/oradba-ansible
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Read the state before the switch
+  ansible.builtin.include_role:
+    name: oradba.automation.oradba
+    tasks_from: db_state
+  vars:
+    oradba_db_sid: "{{ oracle_home_switch_db.sid | default(oracle_home_switch_db) }}"
+    oradba_db_home: "{{ oracle_home_switch_db.source_home | default('') }}"
+
+- name: Keep the state before the switch
+  ansible.builtin.set_fact:
+    oracle_home_switch_before: "{{ oradba_db_state }}"
+
+- name: Assert the database is running
+  ansible.builtin.assert:
+    that:
+      - oracle_home_switch_before.status in ['OPEN', 'MOUNTED']
+      - oracle_home_switch_before.phase != 'unknown'
+    fail_msg: >-
+      {{ oracle_home_switch_before.sid }} is {{ oracle_home_switch_before.status }}
+      {{ oracle_home_switch_before.role | default('') }} - start it before the switch (role must be
+      PRIMARY or PHYSICAL STANDBY).
+    quiet: true
+  when: oracle_home_switch_before.home != oracle_home_switch_target
+
+- name: Report a database that is not part of this phase
+  ansible.builtin.set_fact:
+    oracle_home_switch_results: >-
+      {{ oracle_home_switch_results + [oracle_home_switch_before.sid ~ ': not in phase '
+         ~ oracle_home_switch_phase ~ ' - ' ~ (oracle_home_switch_before.role | default('?'))
+         ~ ', switched in phase ' ~ oracle_home_switch_before.phase] }}
+  when:
+    - oracle_home_switch_before.home != oracle_home_switch_target
+    - oracle_home_switch_before.phase != oracle_home_switch_phase
+
+- name: Report a database that already runs from the target home
+  ansible.builtin.set_fact:
+    oracle_home_switch_results: >-
+      {{ oracle_home_switch_results + [oracle_home_switch_before.sid ~ ': skipped - already on '
+         ~ oracle_home_switch_target] }}
+  when: oracle_home_switch_before.home == oracle_home_switch_target
+
+- name: Switch the database
+  when:
+    - oracle_home_switch_before.home != oracle_home_switch_target
+    - oracle_home_switch_before.phase == oracle_home_switch_phase
+  block:
+    # Written before the deploy, so a failed deploy can be rolled back too
+    - name: Record the source home for a rollback
+      become: true
+      ansible.builtin.copy:
+        content: >-
+          {{ {'sid': oracle_home_switch_before.sid, 'source_home': oracle_home_switch_before.home,
+              'target_home': oracle_home_switch_target, 'phase': oracle_home_switch_phase,
+              'version_before': oracle_home_switch_before.version | default(''),
+              'oratab_autostart': oracle_home_switch_before.oratab_autostart | default('')} | to_nice_json }}
+        dest: "{{ oracle_home_switch_base }}/logs/home_switch_{{ oracle_home_switch_before.sid }}.json"
+        owner: "{{ oracle_home_switch_owner }}"
+        mode: "0640"
+      when: not oracle_home_switch_dry_run | bool
+
+    - name: Stop the listeners in the source home
+      become: true
+      become_user: "{{ oracle_home_switch_owner }}"
+      ansible.builtin.command:
+        argv:
+          - "{{ oracle_home_switch_before.home }}/bin/lsnrctl"
+          - stop
+          - "{{ item }}"
+      environment:
+        ORACLE_HOME: "{{ oracle_home_switch_before.home }}"
+        TNS_ADMIN: "{{ oracle_home_switch_tns_admin or (oracle_home_switch_before.home ~ '/network/admin') }}"
+      register: oracle_home_switch_lsnr_stop
+      # rc 1: listener was not running - nothing to stop
+      changed_when: oracle_home_switch_lsnr_stop.rc == 0
+      failed_when: oracle_home_switch_lsnr_stop.rc not in [0, 1]
+      loop: "{{ oracle_home_switch_listeners }}"
+      when: not oracle_home_switch_dry_run | bool
+
+    - name: Run the engine deploy for {{ oracle_home_switch_before.sid }}
+      become: true
+      become_user: "{{ oracle_home_switch_owner }}"
+      ansible.builtin.command:
+        argv: >-
+          {{ [oracle_home_switch_base ~ '/bin/au_run.sh']
+             + (['--dry-run'] if oracle_home_switch_dry_run | bool else [])
+             + ['--profile', oracle_home_switch_profile,
+                '-config', oracle_home_switch_base ~ '/etc/au_patch.cfg',
+                '-patch', '-mode', 'deploy', '-noconsole'] }}
+      environment: >-
+        {{ oracle_home_switch_environment | combine({
+             'AU_SID': oracle_home_switch_before.sid,
+             'AU_SOURCE_HOME': oracle_home_switch_before.home,
+             'AU_TARGET_HOME': oracle_home_switch_target,
+             'AU_DOWNLOAD_FOLDER': oracle_home_switch_folder,
+             'AU_PROFILE_DIR': oracle_home_switch_profile_dir}) }}
+      register: oracle_home_switch_deploy
+      changed_when: not oracle_home_switch_dry_run | bool
+      async: "{{ oracle_home_switch_async_timeout }}"
+      poll: "{{ oracle_home_switch_async_poll }}"
+
+    - name: Report the engine output
+      ansible.builtin.debug:
+        msg: >-
+          {{ ((oracle_home_switch_deploy.stdout_lines | default([]))
+              + (oracle_home_switch_deploy.stderr_lines | default([])))[-40:] }}
+
+    - name: Complete the switch
+      ansible.builtin.include_tasks: after_deploy.yml
+      when: not oracle_home_switch_dry_run | bool
+
+    - name: Record a dry run
+      ansible.builtin.set_fact:
+        oracle_home_switch_results: >-
+          {{ oracle_home_switch_results + [oracle_home_switch_before.sid ~ ': dry run ('
+             ~ oracle_home_switch_phase ~ ', ' ~ oracle_home_switch_before.home ~ ' -> '
+             ~ oracle_home_switch_target ~ ')'] }}
+      when: oracle_home_switch_dry_run | bool

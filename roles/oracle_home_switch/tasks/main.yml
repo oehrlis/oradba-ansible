@@ -1,0 +1,50 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: roles/oracle_home_switch/tasks/main.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.2.0
+# Purpose....: Move the databases of a host out of place to the target home with
+#              au_run.sh -mode deploy (restore point, restart, oratab, datapatch
+#              by AutoUpgrade), plus listener, network files, standby apply and
+#              post checks around it.
+# Notes......: Data Guard order is the playbook's job (standby phase before
+#              primary phase); this role checks the actual role of every
+#              database against oracle_home_switch_phase and refuses a mismatch.
+#              NOT YET RUN AGAINST A REAL DATABASE (v0.2.0) - molecule covers
+#              the logic with stub homes and engine dry-run only.
+# Reference..: https://github.com/oehrlis/oradba-ansible
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Determine the target home
+  ansible.builtin.include_role:
+    name: oradba.automation.oradba
+    tasks_from: target_home
+  vars:
+    oradba_target_home_explicit: "{{ oracle_home_switch_target_home }}"
+    oradba_target_home_folder: "{{ oracle_home_switch_folder }}"
+
+- name: Set the target home
+  ansible.builtin.set_fact:
+    oracle_home_switch_target: "{{ oradba_target_home }}"
+    oracle_home_switch_results: []
+
+- name: Look for the target home
+  ansible.builtin.stat:
+    path: "{{ oracle_home_switch_target }}/bin/oracle"
+  register: oracle_home_switch_target_stat
+  failed_when: not oracle_home_switch_target_stat.stat.exists
+
+- name: Switch each database
+  ansible.builtin.include_tasks: database.yml
+  loop: "{{ oracle_home_switch_databases }}"
+  loop_control:
+    loop_var: oracle_home_switch_db
+    label: "{{ oracle_home_switch_db.sid | default(oracle_home_switch_db) }}"
+
+- name: Report the switch result
+  ansible.builtin.debug:
+    msg: "{{ oracle_home_switch_results }}"

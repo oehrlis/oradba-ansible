@@ -1,0 +1,17 @@
+---
+galaxy_info:
+  author: Stefan Oehrli
+  description: Stage a verified download folder on hosts without MOS access
+  company: OraDBA
+  license: Apache-2.0
+  min_ansible_version: "2.16"
+  platforms:
+    - name: EL
+      versions:
+        - "8"
+        - "9"
+  galaxy_tags:
+    - oracle
+    - patching
+dependencies:
+  - role: oradba.automation.oradba

@@ -50,3 +50,70 @@
         that:
           - oracle_home_create_target == '/u00/app/oracle/product/19.32.0.0'
         fail_msg: "Derived {{ oracle_home_create_target }}, expected product/19.32.0.0 (DB RU, not OJVM 19.31)"
+
+    - name: Create the stub homes and databases
+      ansible.builtin.include_tasks: tasks/stubs.yml
+
+    - name: Run autoupgrade_preflight
+      ansible.builtin.include_role:
+        name: oradba.automation.autoupgrade_preflight
+      vars:
+        autoupgrade_preflight_databases: [STBY1, PRIM1, SOLO1]
+        autoupgrade_preflight_dry_run: true
+        # The fixture folder holds no zips and the stub homes no OPatch inventory
+        autoupgrade_preflight_verify_folder: false
+        autoupgrade_preflight_verify_home: false
+
+    - name: Run oracle_home_switch in phase standby
+      ansible.builtin.include_role:
+        name: oradba.automation.oracle_home_switch
+      vars:
+        oracle_home_switch_databases: [STBY1, PRIM1, SOLO1]
+        oracle_home_switch_phase: standby
+        oracle_home_switch_dry_run: true
+
+    - name: Assert only the standby was switched in phase standby
+      ansible.builtin.assert:
+        that:
+          - oracle_home_switch_results | length == 3
+          - "oracle_home_switch_results[0] is search('^STBY1: dry run [(]standby')"
+          - "oracle_home_switch_results[1] is search('^PRIM1: not in phase standby .* phase primary$')"
+          - "oracle_home_switch_results[2] is search('^SOLO1: not in phase standby .* phase standalone$')"
+        fail_msg: "{{ oracle_home_switch_results }}"
+
+    - name: Run oracle_home_rollback without a mode
+      block:
+        - name: Run oracle_home_rollback without a mode
+          ansible.builtin.include_role:
+            name: oradba.automation.oracle_home_rollback
+          vars:
+            oracle_home_rollback_databases: [ROLL1]
+
+        - name: Fail - a rollback without a mode must be refused
+          ansible.builtin.fail:
+            msg: oracle_home_rollback ran without oracle_home_rollback_mode
+      rescue:
+        - name: Assert the refusal named the mode
+          ansible.builtin.assert:
+            that:
+              - ansible_failed_result.msg is search('oracle_home_rollback_mode')
+
+    - name: Run oracle_home_rollback in mode home
+      ansible.builtin.include_role:
+        name: oradba.automation.oracle_home_rollback
+      vars:
+        oracle_home_rollback_databases:
+          - ROLL1
+          - { sid: SOLO1, source_home: /u00/app/oracle/product/19.31.0.0 }
+        oracle_home_rollback_mode: home
+        oracle_home_rollback_phase: standalone
+        oracle_home_rollback_dry_run: true
+
+    - name: Assert the rollback found the previous home and skipped SOLO1
+      ansible.builtin.assert:
+        that:
+          - oracle_home_rollback_previous == '/u00/app/oracle/product/19.31.0.0'
+          - >-
+            oracle_home_rollback_results | select('search', '^SOLO1. skipped - already on .*19[.]31')
+            | list | length == 1
+        fail_msg: "{{ oracle_home_rollback_results }} / {{ oracle_home_rollback_previous }}"

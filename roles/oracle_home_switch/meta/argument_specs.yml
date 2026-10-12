@@ -1,0 +1,63 @@
+---
+# Generated from defaults/main.yml and reviewed; keep both in step.
+argument_specs:
+  main:
+    short_description: Move databases out of place to a new Oracle Home with the engine deploy mode
+    options:
+      oracle_home_switch_base:
+        type: str
+        description: Install directory of the engine.
+      oracle_home_switch_owner:
+        type: str
+        description: User that runs the engine and owns the homes.
+      oracle_home_switch_profile:
+        type: str
+        description: Patch profile; must match download and create_home.
+      oracle_home_switch_profile_dir:
+        type: str
+        description: Directory on the target for site profiles (AU_PROFILE_DIR).
+      oracle_home_switch_folder:
+        type: str
+        description: Download folder of the profile.
+      oracle_home_switch_databases:
+        type: str
+        description: Databases to switch, same format as oradba_patch_databases.
+      oracle_home_switch_target_home:
+        type: str
+        description: Target Oracle Home; empty derives it from patches_info.json.
+      oracle_home_switch_phase:
+        type: str
+        description: Phase of this run; only databases whose runtime role belongs to it are switched,
+          the others are reported.
+        choices:
+          - standby
+          - standalone
+          - primary
+      oracle_home_switch_listeners:
+        type: list
+        description: Listener names to stop in the source home and start from the target home; empty leaves
+          listeners alone.
+        elements: str
+      oracle_home_switch_tns_admin:
+        type: str
+        description: Central TNS_ADMIN directory; empty copies *.ora from the source home into the target
+          home.
+      oracle_home_switch_manage_apply:
+        type: bool
+        description: Start managed recovery on a standby after the deploy when not running (skipped when
+          the broker is active).
+      oracle_home_switch_max_new_invalid:
+        type: int
+        description: Tolerated new invalid objects after the switch compared to the state before.
+      oracle_home_switch_environment:
+        type: dict
+        description: Extra caller environment for the engine; no secrets.
+      oracle_home_switch_dry_run:
+        type: bool
+        description: Pass --dry-run to au_run.sh; no database is touched and post checks are skipped.
+      oracle_home_switch_async_timeout:
+        type: int
+        description: Maximum run time of one deploy in seconds.
+      oracle_home_switch_async_poll:
+        type: int
+        description: Poll interval of the deploy in seconds.

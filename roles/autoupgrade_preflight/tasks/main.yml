@@ -1,0 +1,137 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: roles/autoupgrade_preflight/tasks/main.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.2.0
+# Purpose....: Check a host before a home switch: engine, download folder,
+#              target home, free space, and per database the state and the
+#              AutoUpgrade analyze result.
+# Notes......: Read-only. Every problem is collected; the role fails once at the
+#              end with the complete list, so one run shows everything to fix.
+# Reference..: https://github.com/oehrlis/oradba-ansible
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Start with an empty findings list
+  ansible.builtin.set_fact:
+    autoupgrade_preflight_findings: []
+
+- name: Look for the engine and the jar
+  ansible.builtin.stat:
+    path: "{{ autoupgrade_preflight_base }}/{{ item }}"
+  register: autoupgrade_preflight_engine
+  loop:
+    - bin/au_run.sh
+    - jar/autoupgrade.jar
+
+- name: Record a missing engine
+  ansible.builtin.set_fact:
+    autoupgrade_preflight_findings: "{{ autoupgrade_preflight_findings + ['missing: ' ~ item.item] }}"
+  loop: "{{ autoupgrade_preflight_engine.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: not item.stat.exists
+
+- name: Check MOS connectivity
+  become: true
+  become_user: "{{ autoupgrade_preflight_owner }}"
+  ansible.builtin.command:
+    argv:
+      - "{{ autoupgrade_preflight_base }}/bin/au_check_connectivity.sh"
+  register: autoupgrade_preflight_conn
+  changed_when: false
+  failed_when: false
+  when: autoupgrade_preflight_connectivity | bool
+
+- name: Record a connectivity failure
+  ansible.builtin.set_fact:
+    autoupgrade_preflight_findings: >-
+      {{ autoupgrade_preflight_findings + ['connectivity: au_check_connectivity.sh rc '
+         ~ autoupgrade_preflight_conn.rc ~ ' - ' ~ (autoupgrade_preflight_conn.stderr_lines | last | default(''))] }}
+  when:
+    - autoupgrade_preflight_conn is not skipped
+    - autoupgrade_preflight_conn.rc not in [0, 2]
+
+- name: Verify the download folder
+  become: true
+  become_user: "{{ autoupgrade_preflight_owner }}"
+  ansible.builtin.command:
+    argv:
+      - "{{ autoupgrade_preflight_base }}/bin/au_patch_verify.sh"
+      - "{{ autoupgrade_preflight_folder }}"
+  register: autoupgrade_preflight_folder_check
+  changed_when: false
+  failed_when: false
+  when: autoupgrade_preflight_verify_folder | bool
+
+- name: Record a folder that does not verify
+  ansible.builtin.set_fact:
+    autoupgrade_preflight_findings: >-
+      {{ autoupgrade_preflight_findings + ['download folder ' ~ autoupgrade_preflight_folder ~ ': '
+         ~ ((autoupgrade_preflight_folder_check.stderr_lines + autoupgrade_preflight_folder_check.stdout_lines)
+            | select('search', '(?i)error|fail|missing') | first
+            | default('rc ' ~ autoupgrade_preflight_folder_check.rc))] }}
+  when:
+    - autoupgrade_preflight_folder_check is not skipped
+    - autoupgrade_preflight_folder_check.rc != 0
+
+- name: Determine the target home
+  ansible.builtin.include_role:
+    name: oradba.automation.oradba
+    tasks_from: target_home
+  vars:
+    oradba_target_home_explicit: "{{ autoupgrade_preflight_target_home }}"
+    oradba_target_home_folder: "{{ autoupgrade_preflight_folder }}"
+
+- name: Look for the target home
+  ansible.builtin.stat:
+    path: "{{ oradba_target_home }}/bin/oracle"
+  register: autoupgrade_preflight_target
+
+- name: Record a missing target home
+  ansible.builtin.set_fact:
+    autoupgrade_preflight_findings: >-
+      {{ autoupgrade_preflight_findings + ['target home ' ~ oradba_target_home
+         ~ ' has no bin/oracle - run home_create first'] }}
+  when: not autoupgrade_preflight_target.stat.exists
+
+- name: Measure the free space for the target home
+  ansible.builtin.command:
+    argv:
+      - df
+      - -Pk
+      - "{{ oradba_target_home if autoupgrade_preflight_target.stat.exists else oradba_oracle_base }}"
+  register: autoupgrade_preflight_df
+  changed_when: false
+
+- name: Record too little free space
+  ansible.builtin.set_fact:
+    autoupgrade_preflight_findings: >-
+      {{ autoupgrade_preflight_findings + ['free space ' ~ autoupgrade_preflight_free_gb
+         ~ ' GB < ' ~ autoupgrade_preflight_min_free_gb ~ ' GB'] }}
+  vars:
+    autoupgrade_preflight_free_gb: >-
+      {{ ((autoupgrade_preflight_df.stdout_lines | last).split()[3] | int / 1024 / 1024) | round(1) }}
+  when: autoupgrade_preflight_free_gb | float < autoupgrade_preflight_min_free_gb | float
+
+- name: Check each database
+  ansible.builtin.include_tasks: database.yml
+  loop: "{{ autoupgrade_preflight_databases }}"
+  loop_control:
+    loop_var: autoupgrade_preflight_db
+    label: "{{ autoupgrade_preflight_db.sid | default(autoupgrade_preflight_db) }}"
+
+- name: Report the preflight result
+  ansible.builtin.debug:
+    msg: >-
+      {{ ['Preflight OK: ' ~ (autoupgrade_preflight_databases | length) ~ ' database(s), target '
+          ~ oradba_target_home] if autoupgrade_preflight_findings | length == 0
+         else autoupgrade_preflight_findings }}
+
+- name: Fail on preflight findings
+  ansible.builtin.fail:
+    msg: "Preflight found {{ autoupgrade_preflight_findings | length }} problem(s), see the report above."
+  when: autoupgrade_preflight_findings | length > 0

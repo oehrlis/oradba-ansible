@@ -1,0 +1,31 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: roles/patch_stage/defaults/main.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.2.0
+# Purpose....: Defaults for staging a download folder on hosts without MOS access.
+# Notes......: Path: download host -> controller directory -> target hosts. The
+#              controller directory can also be filled from an artefact store.
+#              Patch zips are large; the controller needs the space once.
+# Reference..: https://github.com/oehrlis/oradba-ansible
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+patch_stage_base: "{{ oradba_autoupgrade_base }}"
+patch_stage_owner: "{{ oradba_oracle_user }}"
+patch_stage_group: "{{ oradba_oracle_groups.inventory.name }}"
+patch_stage_profile: "{{ oradba_patch_profile }}"
+patch_stage_folder: >-
+  {{ patch_stage_base }}/patches/{{ patch_stage_profile | basename | regex_replace('\.profile$', '') }}
+
+# Controller directory with the folder content (zips, *.json, au_patch.env)
+patch_stage_src_dir: >-
+  {{ playbook_dir }}/stage/{{ patch_stage_profile | basename | regex_replace('\.profile$', '') }}
+# Inventory name of the download host to fetch the folder from first;
+# empty = patch_stage_src_dir is already filled
+patch_stage_fetch_from: ""
+# Verify size and sha256 on every target (au_patch_verify.sh)
+patch_stage_verify: true

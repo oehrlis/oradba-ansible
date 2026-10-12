@@ -1,0 +1,95 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: roles/patch_stage/tasks/main.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.2.0
+# Purpose....: Distribute a verified download folder to hosts without MOS access
+#              and verify it there with the engine.
+# Notes......: The download host keeps its folder untouched. Copies are
+#              checksum based, a second run transfers nothing. The engine
+#              verification on the target is the proof - not the copy.
+# Reference..: https://github.com/oehrlis/oradba-ansible
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Fetch the folder from the download host
+  when: patch_stage_fetch_from | length > 0
+  run_once: true
+  block:
+    - name: List the folder on the download host
+      ansible.builtin.find:
+        paths: "{{ patch_stage_folder }}"
+        file_type: file
+        recurse: false
+      delegate_to: "{{ patch_stage_fetch_from }}"
+      register: patch_stage_remote_files
+
+    - name: Assert the download host has the folder
+      ansible.builtin.assert:
+        that:
+          - patch_stage_remote_files.files | selectattr('path', 'search', 'patches_info\.json$') | list | length == 1
+        fail_msg: >-
+          {{ patch_stage_folder }} on {{ patch_stage_fetch_from }} has no patches_info.json -
+          run patch_download there first.
+        quiet: true
+
+    - name: Fetch the files to the controller
+      become: true
+      ansible.builtin.fetch:
+        src: "{{ item.path }}"
+        dest: "{{ patch_stage_src_dir }}/"
+        flat: true
+      delegate_to: "{{ patch_stage_fetch_from }}"
+      loop: "{{ patch_stage_remote_files.files }}"
+      loop_control:
+        label: "{{ item.path | basename }}"
+
+- name: List the staged files on the controller
+  ansible.builtin.set_fact:
+    patch_stage_files: "{{ query('ansible.builtin.fileglob', patch_stage_src_dir ~ '/*') }}"
+
+- name: Assert the controller directory carries a patch set
+  ansible.builtin.assert:
+    that:
+      - patch_stage_files | select('search', 'patches_info\.json$') | list | length == 1
+    fail_msg: >-
+      {{ patch_stage_src_dir }} has no patches_info.json. Fill it from an artefact store
+      or set patch_stage_fetch_from to the download host.
+    quiet: true
+
+- name: Stage the folder on the target
+  when: inventory_hostname != patch_stage_fetch_from
+  block:
+    - name: Create the download folder
+      become: true
+      ansible.builtin.file:
+        path: "{{ patch_stage_folder }}"
+        state: directory
+        owner: "{{ patch_stage_owner }}"
+        group: "{{ patch_stage_group }}"
+        mode: "0750"
+
+    - name: Copy the patch set
+      become: true
+      ansible.builtin.copy:
+        src: "{{ item }}"
+        dest: "{{ patch_stage_folder }}/{{ item | basename }}"
+        owner: "{{ patch_stage_owner }}"
+        group: "{{ patch_stage_group }}"
+        mode: "0640"
+      loop: "{{ patch_stage_files }}"
+      loop_control:
+        label: "{{ item | basename }}"
+
+- name: Verify the staged folder through the engine
+  become: true
+  become_user: "{{ patch_stage_owner }}"
+  ansible.builtin.command:
+    argv:
+      - "{{ patch_stage_base }}/bin/au_patch_verify.sh"
+      - "{{ patch_stage_folder }}"
+  changed_when: false
+  when: patch_stage_verify | bool

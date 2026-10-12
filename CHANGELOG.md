@@ -3,6 +3,30 @@
 All notable changes to the collection `oradba.automation` are documented in this file. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [SemVer](https://semver.org/).
 
+## [0.2.0] - 2026-10-12
+
+Patch apply. The switch and rollback roles have **not yet run against a real database**; molecule covers their
+logic with stub homes and the engine in dry-run mode. Test them in a lab before a production window.
+
+### Added
+
+- Role `autoupgrade_preflight`: engine, MOS connectivity (optional), download folder, target home, free space and
+  per database the state, ARCHIVELOG, `au_home_verify.sh` and `au_run.sh -mode analyze`. All findings are
+  collected and reported once.
+- Role `patch_stage`: download host -> controller directory -> hosts without MOS access, verified on every target
+  with `au_patch_verify.sh`.
+- Role `oracle_home_switch`: `au_run.sh -mode deploy` per database, phase filter from the runtime role
+  (standby, standalone, primary), listener and network files, standby apply (broker aware), post checks against
+  the state before the switch, switch record `logs/home_switch_<SID>.json` written before the deploy.
+- Role `oracle_home_rollback`: mode `restore` (flashback to the deploy restore point, refused for Data Guard
+  members) or mode `home` (previous home plus datapatch); the mode has no default.
+- Shared tasks in role `oradba`: `db_state` (one sqlplus call per database, phase classification) and
+  `target_home` (home name from `patches_info.json`, used by `oracle_home_create` too).
+- Variables `oradba_patch_databases`, `oradba_patch_target_home`.
+- Playbooks `patch_apply` (stage, preflight, standby, standalone, primary with `any_errors_fatal`) and
+  `patch_rollback`.
+- Molecule: stub homes and four stub databases (standby, primary, standalone, rolled-back case).
+
 ## [0.1.0] - 2026-10-12
 
 ### Added

@@ -1,0 +1,39 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: roles/autoupgrade_preflight/defaults/main.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.2.0
+# Purpose....: Defaults for the patch preflight checks.
+# Reference..: https://github.com/oehrlis/oradba-ansible
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+autoupgrade_preflight_base: "{{ oradba_autoupgrade_base }}"
+autoupgrade_preflight_owner: "{{ oradba_oracle_user }}"
+autoupgrade_preflight_profile: "{{ oradba_patch_profile }}"
+autoupgrade_preflight_profile_dir: "{{ oradba_patch_profile_dir }}"
+autoupgrade_preflight_folder: >-
+  {{ autoupgrade_preflight_base }}/patches/{{ autoupgrade_preflight_profile | basename
+     | regex_replace('\.profile$', '') }}
+autoupgrade_preflight_databases: "{{ oradba_patch_databases }}"
+autoupgrade_preflight_target_home: "{{ oradba_patch_target_home }}"
+
+# Minimum free space on the filesystem of the target home
+autoupgrade_preflight_min_free_gb: 10
+# Verify the download folder (au_patch_verify.sh)
+autoupgrade_preflight_verify_folder: true
+# Compare the target home with each source home (au_home_verify.sh)
+autoupgrade_preflight_verify_home: true
+# Run au_run.sh -mode analyze per database
+autoupgrade_preflight_analyze: true
+# Check MOS connectivity (download hosts only; au_check_connectivity.sh)
+autoupgrade_preflight_connectivity: false
+# AutoUpgrade deploy creates a guaranteed restore point: needs ARCHIVELOG
+autoupgrade_preflight_require_archivelog: true
+# Pass --dry-run to au_run.sh for the analyze step
+autoupgrade_preflight_dry_run: false
+# Extra caller environment for the engine, no secrets
+autoupgrade_preflight_environment: {}

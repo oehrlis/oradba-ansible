@@ -1,0 +1,102 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: roles/oracle_home_rollback/tasks/database.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.2.0
+# Purpose....: Roll one database back to its previous home.
+# Reference..: https://github.com/oehrlis/oradba-ansible
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Set the database to roll back
+  ansible.builtin.set_fact:
+    oracle_home_rollback_sid: "{{ oracle_home_rollback_db.sid | default(oracle_home_rollback_db) }}"
+
+- name: Read the switch record
+  ansible.builtin.slurp:
+    src: "{{ oracle_home_rollback_base }}/logs/home_switch_{{ oracle_home_rollback_sid }}.json"
+  register: oracle_home_rollback_record_raw
+  failed_when: false
+
+- name: Set the previous home
+  ansible.builtin.set_fact:
+    oracle_home_rollback_record: >-
+      {{ (oracle_home_rollback_record_raw.content | b64decode | from_json)
+         if oracle_home_rollback_record_raw.content is defined else {} }}
+
+- name: Set the previous home from the record or the database entry
+  ansible.builtin.set_fact:
+    oracle_home_rollback_previous: >-
+      {{ oracle_home_rollback_db.source_home | default('')
+         or oracle_home_rollback_record.source_home | default('') }}
+
+- name: Assert the previous home is known and present
+  ansible.builtin.stat:
+    path: "{{ oracle_home_rollback_previous }}/bin/oracle"
+  register: oracle_home_rollback_previous_stat
+  failed_when: >-
+    oracle_home_rollback_previous | length == 0 or not oracle_home_rollback_previous_stat.stat.exists
+
+- name: Read the state before the rollback
+  ansible.builtin.include_role:
+    name: oradba.automation.oradba
+    tasks_from: db_state
+  vars:
+    oradba_db_sid: "{{ oracle_home_rollback_sid }}"
+
+- name: Keep the state before the rollback
+  ansible.builtin.set_fact:
+    oracle_home_rollback_state: "{{ oradba_db_state }}"
+
+- name: Report a database that already runs from the previous home
+  ansible.builtin.set_fact:
+    oracle_home_rollback_results: >-
+      {{ oracle_home_rollback_results + [oracle_home_rollback_sid ~ ': skipped - already on '
+         ~ oracle_home_rollback_previous] }}
+  when: oracle_home_rollback_state.home == oracle_home_rollback_previous
+
+- name: Report a database that is not part of this phase
+  ansible.builtin.set_fact:
+    oracle_home_rollback_results: >-
+      {{ oracle_home_rollback_results + [oracle_home_rollback_sid ~ ': not in phase '
+         ~ oracle_home_rollback_phase ~ ', rolled back in phase ' ~ oracle_home_rollback_state.phase] }}
+  when:
+    - oracle_home_rollback_state.home != oracle_home_rollback_previous
+    - oracle_home_rollback_state.phase != oracle_home_rollback_phase
+
+- name: Roll the database back
+  when:
+    - oracle_home_rollback_state.home != oracle_home_rollback_previous
+    - oracle_home_rollback_state.phase == oracle_home_rollback_phase
+  block:
+    - name: Assert the rollback is possible
+      ansible.builtin.assert:
+        that:
+          - oracle_home_rollback_state.status in ['OPEN', 'MOUNTED']
+          - >-
+            oracle_home_rollback_mode != 'restore'
+            or oracle_home_rollback_allow_restore_with_dg | bool
+            or oracle_home_rollback_state.dg_config | default('0') | int <= 1
+          - oracle_home_rollback_mode != 'restore' or oracle_home_rollback_state.grp_name | default('') | length > 0
+        fail_msg: >-
+          {{ oracle_home_rollback_sid }}: role {{ oracle_home_rollback_state.role | default('?') }}, phase
+          {{ oracle_home_rollback_phase }}, mode {{ oracle_home_rollback_mode }}, Data Guard members
+          {{ oracle_home_rollback_state.dg_config | default('?') }}, restore point
+          "{{ oracle_home_rollback_state.grp_name | default('') }}". Mode restore needs a guaranteed
+          restore point and no Data Guard (oracle_home_rollback_allow_restore_with_dg).
+        quiet: true
+
+    - name: Report the planned rollback
+      ansible.builtin.debug:
+        msg: >-
+          {{ oracle_home_rollback_sid }}: mode {{ oracle_home_rollback_mode }},
+          {{ oracle_home_rollback_state.home }} -> {{ oracle_home_rollback_previous }}
+          {{ ('to restore point ' ~ oracle_home_rollback_state.grp_name) if oracle_home_rollback_mode == 'restore'
+             else '' }}{{ ' (dry run)' if oracle_home_rollback_dry_run | bool else '' }}
+
+    - name: Execute the rollback
+      ansible.builtin.include_tasks: execute.yml
+      when: not oracle_home_rollback_dry_run | bool

@@ -24,7 +24,17 @@
   failed_when: not oracle_home_create_engine.stat.exists
 
 - name: Determine the target home
-  ansible.builtin.include_tasks: target.yml
+  ansible.builtin.include_role:
+    name: oradba.automation.oradba
+    tasks_from: target_home
+  vars:
+    oradba_target_home_explicit: "{{ oracle_home_create_target_home }}"
+    oradba_target_home_folder: "{{ oracle_home_create_folder }}"
+    oradba_target_home_base: "{{ oracle_home_create_oracle_base }}"
+
+- name: Set the target home
+  ansible.builtin.set_fact:
+    oracle_home_create_target: "{{ oradba_target_home }}"
 
 - name: Check whether the target home already exists
   ansible.builtin.stat:
