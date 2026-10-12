@@ -1,0 +1,8 @@
+---
+# Collections for the molecule scenarios only - the collection itself has no
+# runtime dependencies.
+collections:
+  - name: community.docker
+    version: ">=3.10.2"
+  - name: ansible.posix
+    version: ">=1.4.0"

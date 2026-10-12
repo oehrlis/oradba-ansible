@@ -1,0 +1,61 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: extensions/molecule/default/molecule.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.1.0
+# Purpose....: Default scenario: all roles on Oracle Linux 8 and 9 containers.
+# Notes......: Real engine release and real autoupgrade.jar; keystore, download
+#              and create_home run in engine dry-run mode (no MOS access, no
+#              Oracle software in CI). Select one platform with
+#              MOLECULE_ARGS="--platform-name oradba-ol8" (CI matrix).
+#              ANSIBLE_COLLECTIONS_PATH comes from the Makefile (.collections).
+# Reference..: https://github.com/oehrlis/oradba-ansible
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+dependency:
+  name: galaxy
+  options:
+    requirements-file: ${MOLECULE_SCENARIO_DIRECTORY}/../requirements.yml
+driver:
+  name: docker
+platforms:
+  - name: oradba-ol8
+    image: docker.io/library/oraclelinux:8
+    command: sleep infinity
+    pre_build_image: true
+    groups:
+      - ol8
+  - name: oradba-ol9
+    image: docker.io/library/oraclelinux:9
+    command: sleep infinity
+    pre_build_image: true
+    groups:
+      - ol9
+provisioner:
+  name: ansible
+  config_options:
+    connection:
+      # Fewer file transfers into the containers (docker cp is flaky under load)
+      pipelining: true
+  inventory:
+    group_vars:
+      ol8:
+        # OL8 ships Python 3.6; prepare.yml installs 3.11 for the managed node
+        ansible_python_interpreter: /usr/bin/python3.11
+      ol9:
+        ansible_python_interpreter: /usr/bin/python3
+scenario:
+  test_sequence:
+    - dependency
+    - destroy
+    - create
+    - prepare
+    - converge
+    - idempotence
+    - verify
+    - destroy
+verifier:
+  name: ansible

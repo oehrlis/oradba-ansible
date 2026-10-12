@@ -1,0 +1,69 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: roles/oradba/defaults/main.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.1.0
+# Purpose....: Single definition of the OraDBA conventions as overridable
+#              defaults (maintenance rule 4). Every other role of the
+#              collection depends on this role and reads these values.
+# Notes......: Source of truth is the conventions page in oradba
+#              (src/doc/conventions.md). Change the page first, then this file.
+#              Override per site in inventory group_vars - never edit here.
+# Reference..: https://github.com/oehrlis/oradba/blob/main/src/doc/conventions.md
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+# Filesystem layout: software, data and archive root
+oradba_oracle_root: /u00
+oradba_oracle_data: /u01
+oradba_oracle_arch: /u02
+oradba_oracle_base: "{{ oradba_oracle_root }}/app/oracle"
+oradba_oracle_inventory: "{{ oradba_oracle_root }}/app/oraInventory"
+oradba_oradata_dir: "{{ oradba_oracle_data }}/oradata"
+oradba_archive_dir: "{{ oradba_oracle_arch }}/archive"
+oradba_fra_dir: "{{ oradba_oracle_arch }}/fast_recovery_area"
+
+# Software owner (UID from the Oracle Database Preinstallation RPM)
+oradba_oracle_user: oracle
+oradba_oracle_uid: 54321
+
+# OS groups by role. Names and GIDs from oracle-database-preinstall-19c.
+# A site with os* names overrides the whole dictionary (see docs/variables.md).
+# The GIDs must be identical on every host that shares files or forms one
+# configuration (Data Guard, shared NFS).
+oradba_oracle_groups:
+  inventory:
+    name: oinstall
+    gid: 54321
+  osdba:
+    name: dba
+    gid: 54322
+  osoper:
+    name: oper
+    gid: 54323
+  osbackupdba:
+    name: backupdba
+    gid: 54324
+  osdgdba:
+    name: dgdba
+    gid: 54325
+  oskmdba:
+    name: kmdba
+    gid: 54326
+  osracdba:
+    name: racdba
+    gid: 54330
+
+# odb_autoupgrade engine: installed as OraDBA extension below ORACLE_BASE/local
+oradba_autoupgrade_base: "{{ oradba_oracle_base }}/local/odb_autoupgrade"
+
+# Oracle Home naming: <ORACLE_BASE>/<prefix>/<major>.<RU>.0.0
+oradba_oracle_home_prefix: product
+
+# Patch profile shared by download and create_home in one run. The profile
+# format belongs to odb_autoupgrade, the content to the site (rules 5 and 8).
+oradba_patch_profile: recommended
+oradba_patch_profile_dir: "{{ oradba_autoupgrade_base }}/profiles"

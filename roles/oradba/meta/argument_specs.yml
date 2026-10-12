@@ -1,0 +1,52 @@
+---
+# Generated from defaults/main.yml and reviewed; keep both in step.
+argument_specs:
+  main:
+    short_description: OraDBA conventions (layout, user, groups, home naming) as overridable defaults
+    options:
+      oradba_oracle_root:
+        type: str
+        description: Software root (binaries, ORACLE_BASE, inventory).
+      oradba_oracle_data:
+        type: str
+        description: Data root (datafiles, control files, online redo).
+      oradba_oracle_arch:
+        type: str
+        description: Archive root (archived redo, fast recovery area).
+      oradba_oracle_base:
+        type: str
+        description: ORACLE_BASE; also root of the OraDBA installation.
+      oradba_oracle_inventory:
+        type: str
+        description: Central inventory directory.
+      oradba_oradata_dir:
+        type: str
+        description: Parent of the per-database datafile directories (<DB_UNIQUE_NAME> below).
+      oradba_archive_dir:
+        type: str
+        description: Parent of the per-database archived redo directories.
+      oradba_fra_dir:
+        type: str
+        description: Fast recovery area (db_recovery_file_dest).
+      oradba_oracle_user:
+        type: str
+        description: Software owner.
+      oradba_oracle_uid:
+        type: int
+        description: UID of the software owner; identical on all hosts that share files.
+      oradba_oracle_groups:
+        type: dict
+        description: OS groups by role (inventory, osdba, osoper, osbackupdba, osdgdba, oskmdba, osracdba),
+          each with name and gid. An override replaces the whole dictionary.
+      oradba_autoupgrade_base:
+        type: str
+        description: Install directory of the odb_autoupgrade engine.
+      oradba_oracle_home_prefix:
+        type: str
+        description: Directory below ORACLE_BASE that holds the Oracle Homes.
+      oradba_patch_profile:
+        type: str
+        description: Patch profile shared by download and create_home (name or absolute path on the target).
+      oradba_patch_profile_dir:
+        type: str
+        description: Directory on the target for site profiles (AU_PROFILE_DIR).

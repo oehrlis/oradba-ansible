@@ -1,0 +1,132 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: roles/oracle_home_create/tasks/main.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.1.0
+# Purpose....: Create an Oracle Home out of place with
+#              au_run.sh --profile ... -mode create_home, run the root scripts
+#              and verify the result with au_home_verify.sh.
+# Notes......: create_home needs no keystore. The pin file in the download
+#              folder decides the patch set, so download and create_home use
+#              the identical list. A home that already has bin/oracle is not
+#              touched (reported, not silently skipped).
+# Reference..: https://github.com/oehrlis/odb_autoupgrade/blob/main/doc/oracle-home.md
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Assert the engine is installed
+  ansible.builtin.stat:
+    path: "{{ oracle_home_create_base }}/bin/au_run.sh"
+  register: oracle_home_create_engine
+  failed_when: not oracle_home_create_engine.stat.exists
+
+- name: Determine the target home
+  ansible.builtin.include_tasks: target.yml
+
+- name: Check whether the target home already exists
+  ansible.builtin.stat:
+    path: "{{ oracle_home_create_target }}/bin/oracle"
+  register: oracle_home_create_existing
+
+- name: Report that the existing home is kept
+  ansible.builtin.debug:
+    msg: >-
+      {{ oracle_home_create_target }} already contains bin/oracle - create_home
+      skipped. A second home on the same RU needs an explicit
+      oracle_home_create_target_home with a suffix ({{ oracle_home_create_target }}_2).
+  when:
+    - oracle_home_create_existing.stat.exists
+    - not oracle_home_create_dry_run | bool
+
+- name: Check whether a central inventory is registered
+  ansible.builtin.stat:
+    path: /etc/oraInst.loc
+  register: oracle_home_create_orainst
+
+- name: Build the engine environment
+  ansible.builtin.set_fact:
+    oracle_home_create_env: >-
+      {{ oracle_home_create_environment
+         | combine({'AU_DOWNLOAD_FOLDER': oracle_home_create_folder,
+                    'AU_PROFILE_DIR': oracle_home_create_profile_dir,
+                    'AU_TARGET_HOME': oracle_home_create_target})
+         | combine({'AU_SOURCE_HOME': oracle_home_create_source_home}
+                   if oracle_home_create_source_home | length > 0 else
+                   {'AU_ORACLE_BASE': oracle_home_create_oracle_base,
+                    'AU_EDITION': oracle_home_create_edition,
+                    'AU_GROUP_OSDBA': oracle_home_create_groups.osdba.name,
+                    'AU_GROUP_OSOPER': oracle_home_create_groups.osoper.name,
+                    'AU_GROUP_OSBACKUPDBA': oracle_home_create_groups.osbackupdba.name,
+                    'AU_GROUP_OSDGDBA': oracle_home_create_groups.osdgdba.name,
+                    'AU_GROUP_OSKMDBA': oracle_home_create_groups.oskmdba.name,
+                    'AU_GROUP_OSRACDBA': oracle_home_create_groups.osracdba.name})
+         | combine({} if oracle_home_create_orainst.stat.exists else
+                   {'AU_INVENTORY_LOCATION': oracle_home_create_inventory,
+                    'AU_INVENTORY_GROUP': oracle_home_create_inventory_group}) }}
+
+- name: Create the Oracle Home
+  when: oracle_home_create_dry_run | bool or not oracle_home_create_existing.stat.exists
+  block:
+    - name: Create the parent directory of the target home
+      become: true
+      ansible.builtin.file:
+        path: "{{ oracle_home_create_target | dirname }}"
+        state: directory
+        owner: "{{ oracle_home_create_owner }}"
+        group: "{{ oracle_home_create_inventory_group }}"
+        mode: "0755"
+      when: not oracle_home_create_dry_run | bool
+
+    - name: Run create_home for {{ oracle_home_create_target }}
+      become: true
+      become_user: "{{ oracle_home_create_owner }}"
+      ansible.builtin.command:
+        argv: >-
+          {{ [oracle_home_create_base ~ '/bin/au_run.sh']
+             + (['--dry-run'] if oracle_home_create_dry_run | bool else [])
+             + ['--profile', oracle_home_create_profile,
+                '-config', oracle_home_create_base ~ '/etc/au_patch.cfg',
+                '-patch', '-mode', 'create_home', '-noconsole'] }}
+      environment: "{{ oracle_home_create_env }}"
+      register: oracle_home_create_run
+      changed_when: not oracle_home_create_dry_run | bool
+      async: "{{ oracle_home_create_async_timeout }}"
+      poll: "{{ oracle_home_create_async_poll }}"
+
+    - name: Report the engine output
+      ansible.builtin.debug:
+        msg: >-
+          {{ ((oracle_home_create_run.stdout_lines | default([]))
+              + (oracle_home_create_run.stderr_lines | default([])))[-40:] }}
+
+- name: Run the root scripts
+  ansible.builtin.include_tasks: root_scripts.yml
+  when:
+    - oracle_home_create_run_root_scripts | bool
+    - oracle_home_create_run is defined
+    - oracle_home_create_run is changed
+
+- name: Verify the new home against the download folder
+  become: true
+  become_user: "{{ oracle_home_create_owner }}"
+  ansible.builtin.command:
+    argv: >-
+      {{ [oracle_home_create_base ~ '/bin/au_home_verify.sh',
+          '--home', oracle_home_create_target,
+          '--download-folder', oracle_home_create_folder]
+         + (['--source-home', oracle_home_create_source_home]
+            if oracle_home_create_source_home | length > 0
+            else ['--edition', oracle_home_create_edition]) }}
+  register: oracle_home_create_verify_run
+  changed_when: false
+  when:
+    - oracle_home_create_verify | bool
+    - not oracle_home_create_dry_run | bool
+
+- name: Report the verification result
+  ansible.builtin.debug:
+    msg: "{{ oracle_home_create_verify_run.stdout_lines + oracle_home_create_verify_run.stderr_lines }}"
+  when: oracle_home_create_verify_run is not skipped

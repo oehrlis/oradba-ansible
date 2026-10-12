@@ -1,0 +1,90 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: roles/autoupgrade_keystore/tasks/create.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.1.0
+# Purpose....: Run au_keystore.sh --create with pass files.
+# Reference..: https://github.com/oehrlis/oradba-ansible
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Assert the MOS credentials are supplied
+  ansible.builtin.assert:
+    that:
+      - autoupgrade_keystore_mos_user | length > 0
+      - autoupgrade_keystore_mos_password | length > 0
+      - autoupgrade_keystore_password | length > 0
+    fail_msg: >-
+      Keystore creation needs autoupgrade_keystore_mos_user,
+      autoupgrade_keystore_mos_password and autoupgrade_keystore_password
+      (from Ansible Vault or a lookup, never from a committed inventory).
+    quiet: true
+
+- name: Create the keystore through the engine
+  block:
+    - name: Create a private temp directory for the pass files
+      become: true
+      become_user: "{{ autoupgrade_keystore_owner }}"
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: au_keystore_
+      register: autoupgrade_keystore_tmp
+      # Transient: removed in the always block of the same run
+      changed_when: false
+
+    - name: Write the pass files
+      become: true
+      become_user: "{{ autoupgrade_keystore_owner }}"
+      ansible.builtin.copy:
+        content: "{{ item.value }}"
+        dest: "{{ autoupgrade_keystore_tmp.path }}/{{ item.name }}"
+        mode: "0600"
+      changed_when: false
+      loop:
+        - name: mos_pass
+          value: "{{ autoupgrade_keystore_mos_password }}"
+        - name: ks_pass
+          value: "{{ autoupgrade_keystore_password }}"
+      no_log: true
+
+    - name: Run au_keystore.sh --create
+      become: true
+      become_user: "{{ autoupgrade_keystore_owner }}"
+      ansible.builtin.command:
+        argv: >-
+          {{ [autoupgrade_keystore_base ~ '/bin/au_keystore.sh', '--create',
+              '--workdir', autoupgrade_keystore_dir,
+              '--mos-user', autoupgrade_keystore_mos_user,
+              '--mos-pass-file', autoupgrade_keystore_tmp.path ~ '/mos_pass',
+              '--ks-pass-file', autoupgrade_keystore_tmp.path ~ '/ks_pass',
+              '--auto-login', autoupgrade_keystore_auto_login]
+             + (['--force', '--yes'] if autoupgrade_keystore_force | bool else [])
+             + (['--dry-run'] if autoupgrade_keystore_dry_run | bool else []) }}
+      register: autoupgrade_keystore_create
+      changed_when: not autoupgrade_keystore_dry_run | bool
+      # The engine never prints a password, but the argv carries the MOS user
+      # name and the task result would carry it into callback plugins.
+      no_log: true
+
+    - name: Report the au_keystore.sh output
+      ansible.builtin.debug:
+        msg: "{{ autoupgrade_keystore_create.stdout_lines + autoupgrade_keystore_create.stderr_lines }}"
+
+  rescue:
+    - name: Report the failed keystore creation
+      ansible.builtin.fail:
+        msg: >-
+          au_keystore.sh --create failed (rc {{ autoupgrade_keystore_create.rc | default('n/a') }}):
+          {{ (autoupgrade_keystore_create.stderr_lines | default([]))[-15:] }}
+
+  always:
+    - name: Remove the pass files
+      become: true
+      ansible.builtin.file:
+        path: "{{ autoupgrade_keystore_tmp.path }}"
+        state: absent
+      changed_when: false
+      when: autoupgrade_keystore_tmp.path is defined

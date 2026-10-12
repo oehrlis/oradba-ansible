@@ -1,0 +1,60 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: roles/odb_autoupgrade_install/defaults/main.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.1.0
+# Purpose....: Defaults for the odb_autoupgrade engine installation.
+# Notes......: Release pinned by tag plus sha256 (maintenance rule 1). A version
+#              bump changes both values together - never one without the other.
+# Reference..: https://github.com/oehrlis/odb_autoupgrade/releases
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+# Engine release
+odb_autoupgrade_install_version: "0.6.0"
+odb_autoupgrade_install_sha256: f842d10c770d9dcc53de90406c54925c626b227b1e23315d96630842176f2c52
+odb_autoupgrade_install_url: >-
+  https://github.com/oehrlis/odb_autoupgrade/releases/download/v{{ odb_autoupgrade_install_version
+  }}/odb_autoupgrade-{{ odb_autoupgrade_install_version }}.tar.gz
+# Offline: path of the tarball on the controller; wins over the URL
+odb_autoupgrade_install_src: ""
+
+# Target
+odb_autoupgrade_install_base: "{{ oradba_autoupgrade_base }}"
+odb_autoupgrade_install_owner: "{{ oradba_oracle_user }}"
+odb_autoupgrade_install_group: "{{ oradba_oracle_groups.inventory.name }}"
+odb_autoupgrade_install_dist_dir: "{{ oradba_oracle_base }}/local/.dist"
+
+# Runtime dependencies: Java 8 or 11 for AutoUpgrade, expect for the keystore
+# console, gettext (envsubst) for the config rendering, acl for become_user to
+# the unprivileged owner. Empty list = skip.
+odb_autoupgrade_install_packages:
+  - java-11-openjdk-headless
+  - expect
+  - gettext
+  - acl
+  - tar
+  - gzip
+  - unzip
+  - curl
+
+# autoupgrade.jar via bin/au_update_jar.sh
+# - jar_src: controller path for offline hosts (wins over jar_url)
+# - jar_url: empty = engine default (public Oracle download URL)
+# - jar_sha256: enforce a build (fleet pinning); empty = print only
+# - jar_update: true = run au_update_jar.sh also when a jar is installed
+#   (installs a newer jar, never a downgrade)
+odb_autoupgrade_install_jar_src: ""
+odb_autoupgrade_install_jar_url: ""
+odb_autoupgrade_install_jar_sha256: ""
+odb_autoupgrade_install_jar_update: false
+
+# Site settings rendered to etc/autoupgrade.env (KEY: value, no secrets).
+# Empty = the file is not managed (an existing one stays untouched).
+# Example:
+#   odb_autoupgrade_install_env:
+#     AUTOUPGRADE_PROXY: http://proxy.example.com:3128
+odb_autoupgrade_install_env: {}

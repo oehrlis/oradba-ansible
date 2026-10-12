@@ -1,0 +1,49 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: roles/oracle_home_create/defaults/main.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.1.0
+# Purpose....: Defaults for out-of-place Oracle Home creation through the engine.
+# Reference..: https://github.com/oehrlis/odb_autoupgrade/blob/main/doc/oracle-home.md
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+oracle_home_create_base: "{{ oradba_autoupgrade_base }}"
+oracle_home_create_owner: "{{ oradba_oracle_user }}"
+
+# Same profile and folder as the download (one folder per profile)
+oracle_home_create_profile: "{{ oradba_patch_profile }}"
+oracle_home_create_profile_dir: "{{ oradba_patch_profile_dir }}"
+oracle_home_create_folder: >-
+  {{ oracle_home_create_base }}/patches/{{ oracle_home_create_profile | basename | regex_replace('\.profile$', '') }}
+
+# Empty target = derived from patches_info.json (releaseUpdate, four parts):
+#   <oracle_base>/product/19.32.0.0
+# A second home on the same RU needs an explicit target with suffix (_2, _3).
+oracle_home_create_target_home: ""
+# Existing home: edition, ORACLE_BASE and groups are derived from it
+oracle_home_create_source_home: ""
+
+# Used only without a source home (otherwise derived by AutoUpgrade)
+oracle_home_create_oracle_base: "{{ oradba_oracle_base }}"
+oracle_home_create_edition: EE
+oracle_home_create_groups: "{{ oradba_oracle_groups }}"
+# Used only when /etc/oraInst.loc does not exist yet
+oracle_home_create_inventory: "{{ oradba_oracle_inventory }}"
+oracle_home_create_inventory_group: "{{ oradba_oracle_groups.inventory.name }}"
+
+# Extra caller environment for the engine (level 2), no secrets
+oracle_home_create_environment: {}
+
+# Run orainstRoot.sh and root.sh as root for a home created in this run
+oracle_home_create_run_root_scripts: true
+# Compare the new home with the download folder (au_home_verify.sh)
+oracle_home_create_verify: true
+# Pass --dry-run to au_run.sh: print the rendered config, no home is created
+oracle_home_create_dry_run: false
+
+oracle_home_create_async_timeout: 7200
+oracle_home_create_async_poll: 30

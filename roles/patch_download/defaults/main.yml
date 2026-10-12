@@ -1,0 +1,47 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: roles/patch_download/defaults/main.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.1.0
+# Purpose....: Defaults for the patch download through the engine.
+# Notes......: Profile format belongs to odb_autoupgrade, profile content to the
+#              consumer (maintenance rule 5). Site or CPU-test profiles are
+#              copied from the controller into patch_download_profile_dir.
+# Reference..: https://github.com/oehrlis/odb_autoupgrade/blob/main/doc/patch-profiles.md
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+patch_download_base: "{{ oradba_autoupgrade_base }}"
+patch_download_owner: "{{ oradba_oracle_user }}"
+
+# Profile: shipped name (recommended, 19.32, ...), a site profile name from
+# patch_download_profile_dir, or an absolute path on the target
+patch_download_profile: "{{ oradba_patch_profile }}"
+# Directory on the target searched before the shipped profiles (AU_PROFILE_DIR)
+patch_download_profile_dir: "{{ oradba_patch_profile_dir }}"
+# Controller paths of *.profile files to copy into patch_download_profile_dir
+patch_download_profiles: []
+
+# One folder per profile, same rule as the engine default
+patch_download_folder: >-
+  {{ patch_download_base }}/patches/{{ patch_download_profile | basename | regex_replace('\.profile$', '') }}
+
+# Extra caller environment for the engine (level 2), e.g. AUTOUPGRADE_PROXY.
+# No secrets - the keystore carries the MOS credentials.
+patch_download_environment: {}
+
+# Download again although the folder carries a pin file (au_patch.env)
+patch_download_force: false
+# Write the MRP as plain patch number into the pin file (CPU-test sets)
+patch_download_resolve_mrp: false
+# Verify size and sha256 of every downloaded file (au_patch_verify.sh)
+patch_download_verify: true
+# Pass --dry-run to au_run.sh: print the rendered config, no download
+patch_download_dry_run: false
+
+# Downloads of a full RU with OJVM and MRP take long on slow links
+patch_download_async_timeout: 14400
+patch_download_async_poll: 30

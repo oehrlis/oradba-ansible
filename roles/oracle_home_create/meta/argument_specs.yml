@@ -1,0 +1,64 @@
+---
+# Generated from defaults/main.yml and reviewed; keep both in step.
+argument_specs:
+  main:
+    short_description: Out-of-place Oracle Home creation through the odb_autoupgrade engine
+    options:
+      oracle_home_create_base:
+        type: str
+        description: Install directory of the engine.
+      oracle_home_create_owner:
+        type: str
+        description: User that runs the engine and owns the new home.
+      oracle_home_create_profile:
+        type: str
+        description: Patch profile; must match the profile of the download.
+      oracle_home_create_profile_dir:
+        type: str
+        description: Directory on the target for site profiles (AU_PROFILE_DIR).
+      oracle_home_create_folder:
+        type: str
+        description: Download folder with the patch zips, patches_info.json and pin file.
+      oracle_home_create_target_home:
+        type: str
+        description: New Oracle Home; empty derives <ORACLE_BASE>/product/<RU in four parts> from patches_info.json.
+      oracle_home_create_source_home:
+        type: str
+        description: Existing Oracle Home; when set, edition, ORACLE_BASE and groups are derived from
+          it.
+      oracle_home_create_oracle_base:
+        type: str
+        description: ORACLE_BASE for a home without source home.
+      oracle_home_create_edition:
+        type: str
+        description: Edition for a home without source home.
+        choices:
+          - EE
+          - SE2
+      oracle_home_create_groups:
+        type: dict
+        description: OS group names for a home without source home, same format as oradba_oracle_groups.
+      oracle_home_create_inventory:
+        type: str
+        description: Inventory location, used only when /etc/oraInst.loc does not exist.
+      oracle_home_create_inventory_group:
+        type: str
+        description: Inventory group, used only when /etc/oraInst.loc does not exist.
+      oracle_home_create_environment:
+        type: dict
+        description: Extra caller environment for the engine; no secrets.
+      oracle_home_create_run_root_scripts:
+        type: bool
+        description: Run orainstRoot.sh and root.sh as root for a home created in this run.
+      oracle_home_create_verify:
+        type: bool
+        description: Compare the new home with the download folder (au_home_verify.sh).
+      oracle_home_create_dry_run:
+        type: bool
+        description: Pass --dry-run to au_run.sh; prints the rendered config, creates nothing.
+      oracle_home_create_async_timeout:
+        type: int
+        description: Maximum run time of create_home in seconds.
+      oracle_home_create_async_poll:
+        type: int
+        description: Poll interval of create_home in seconds.

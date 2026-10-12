@@ -1,0 +1,123 @@
+---
+- name: Verify
+  hosts: all
+  gather_facts: false
+  vars:
+    verify_base: /u00/app/oracle/local/odb_autoupgrade
+  tasks:
+    - name: Read the groups
+      ansible.builtin.getent:
+        database: group
+
+    - name: Assert the groups carry the convention GIDs
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.getent_group[item.0][1] == item.1
+        quiet: true
+      loop:
+        - [oinstall, "54321"]
+        - [dba, "54322"]
+        - [oper, "54323"]
+        - [backupdba, "54324"]
+        - [dgdba, "54325"]
+        - [kmdba, "54326"]
+        - [racdba, "54330"]
+
+    - name: Read the oracle user groups
+      ansible.builtin.command: id -nG oracle
+      register: verify_id
+      changed_when: false
+
+    - name: Assert the oracle user has all groups
+      ansible.builtin.assert:
+        that:
+          - verify_id.stdout.split() | first == 'oinstall'
+          - verify_id.stdout.split() | sort == ['backupdba', 'dba', 'dgdba', 'kmdba', 'oinstall', 'oper', 'racdba']
+
+    - name: Stat the layout
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: verify_dirs
+      loop:
+        - /u00/app/oracle
+        - /u00/app/oraInventory
+        - /u01/oradata
+        - /u02/fast_recovery_area
+        - "{{ verify_base }}/keystore"
+
+    - name: Assert owner and mode of the layout
+      ansible.builtin.assert:
+        that:
+          - item.stat.isdir
+          - item.stat.pw_name == 'oracle'
+          - item.stat.gr_name == 'oinstall'
+          - item.item != verify_base ~ '/keystore' or item.stat.mode == '0700'
+          - item.item != '/u00/app/oraInventory' or item.stat.mode == '0770'
+        quiet: true
+      loop: "{{ verify_dirs.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Read the engine version
+      ansible.builtin.slurp:
+        src: "{{ verify_base }}/VERSION"
+      register: verify_version
+
+    - name: Assert engine 0.6.0 and a jar are installed
+      ansible.builtin.assert:
+        that:
+          - verify_version.content | b64decode | trim == '0.6.0'
+
+    - name: Assert no keystore was written by the dry run
+      ansible.builtin.stat:
+        path: "{{ verify_base }}/keystore/ewallet.p12"
+      register: verify_ewallet
+      failed_when: verify_ewallet.stat.exists
+
+    # au_run.sh --dry-run prints only the java command line, so the config is
+    # rendered with the engine generator and the environment oracle_home_create
+    # passes without a source home.
+    - name: Render a create_home config through the engine
+      become: true
+      become_user: oracle
+      ansible.builtin.command:
+        argv:
+          - "{{ verify_base }}/bin/au_gen_config.sh"
+          - --ru
+          - "19.32"
+          - --oracle-base
+          - /u00/app/oracle
+          - --edition
+          - EE
+          - --inventory
+          - /u00/app/oraInventory
+          - --inventory-group
+          - oinstall
+          - --output
+          - /tmp/verify_create_home.cfg
+          - --force
+        chdir: /tmp
+      environment:
+        AU_GROUP_OSDBA: dba
+        AU_GROUP_OSOPER: oper
+        AU_GROUP_OSBACKUPDBA: backupdba
+        AU_GROUP_OSDGDBA: dgdba
+        AU_GROUP_OSKMDBA: kmdba
+        AU_GROUP_OSRACDBA: racdba
+      changed_when: false
+
+    - name: Read the rendered config
+      ansible.builtin.slurp:
+        src: /tmp/verify_create_home.cfg
+      register: verify_render
+
+    - name: Assert the rendered config follows the conventions
+      ansible.builtin.assert:
+        that:
+          - "'patch1.target_home=/u00/app/oracle/product/19.32.0.0' in verify_lines"
+          - "'patch1.home_settings.osdba_group=dba' in verify_lines"
+          - "'patch1.home_settings.osracdba_group=racdba' in verify_lines"
+          - "'patch1.home_settings.inventory_group=oinstall' in verify_lines"
+          - verify_lines | select('match', '^global[.]keystore') | list | length == 0
+      vars:
+        verify_lines: "{{ (verify_render.content | b64decode).splitlines() }}"

@@ -1,0 +1,50 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: galaxy.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.1.0
+# Purpose....: Collection metadata for oradba.automation.
+# Notes......: version must match the VERSION file (checked by make lint).
+# Reference..: https://github.com/oehrlis/oradba-ansible
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+namespace: oradba
+name: automation
+version: 0.1.0
+readme: README.md
+authors:
+  - Stefan Oehrli <stefan.oehrli@oradba.ch>
+description: >-
+  Ansible roles and playbooks for Oracle Database software on Linux - OS users and layout, the odb_autoupgrade
+  engine, MOS keystore, patch download and Oracle Home creation. AutoUpgrade is called only through the engine.
+license:
+  - Apache-2.0
+tags:
+  - oracle
+  - database
+  - autoupgrade
+  - patching
+  - linux
+dependencies: {}
+repository: https://github.com/oehrlis/oradba-ansible
+documentation: https://github.com/oehrlis/oradba-ansible/tree/main/docs
+homepage: https://github.com/oehrlis/oradba-ansible
+issues: https://github.com/oehrlis/oradba-ansible/issues
+build_ignore:
+  - .git
+  - .github
+  - .venv
+  - .collections
+  - .claude
+  - .gitignore
+  - .ansible
+  - tasks
+  - dist
+  - extensions
+  - requirements-dev.txt
+  - Makefile
+  - CLAUDE.md
+  - "*.tar.gz"

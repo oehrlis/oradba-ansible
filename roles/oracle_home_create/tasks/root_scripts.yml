@@ -1,0 +1,36 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: roles/oracle_home_create/tasks/root_scripts.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.1.0
+# Purpose....: Run orainstRoot.sh (first install on the host) and root.sh for a
+#              home created in this run.
+# Notes......: AutoUpgrade runs them itself only when the owner has passwordless
+#              sudo; otherwise it prints them. Both scripts are safe to repeat.
+# Reference..: https://github.com/oehrlis/oradba-ansible
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Look for orainstRoot.sh
+  ansible.builtin.stat:
+    path: "{{ oracle_home_create_inventory }}/orainstRoot.sh"
+  register: oracle_home_create_orainstroot
+  when: not oracle_home_create_orainst.stat.exists
+
+- name: Run orainstRoot.sh
+  become: true
+  ansible.builtin.command:
+    cmd: "{{ oracle_home_create_inventory }}/orainstRoot.sh"
+  changed_when: true
+  when:
+    - not oracle_home_create_orainst.stat.exists
+    - oracle_home_create_orainstroot.stat.exists
+
+- name: Run root.sh of the new home
+  become: true
+  ansible.builtin.command:
+    cmd: "{{ oracle_home_create_target }}/root.sh"
+  changed_when: true

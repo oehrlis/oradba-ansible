@@ -1,0 +1,34 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: .ansible-lint
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.1.0
+# Purpose....: ansible-lint configuration for the oradba.automation collection.
+# Notes......: Profile production, no skip_list. Every rule that oci-labs skips
+#              (var-naming[no-role-prefix]) is enforced here: cross-role values
+#              live in the defaults-only role "oradba" as oradba_* variables,
+#              which satisfies the prefix rule instead of disabling it.
+#              See docs/ansible-standard.md.
+# Reference..: https://github.com/oehrlis/oradba-ansible
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+profile: production
+strict: true
+offline: true
+
+exclude_paths:
+  - .venv/
+  - .collections/
+  - .ansible/
+  - .cache/
+  - .github/
+  - dist/
+  - tasks/
+
+# Molecule scenarios use community.docker and ansible.posix; the collection
+# itself has no runtime dependencies.
+mock_modules: []
+mock_roles: []

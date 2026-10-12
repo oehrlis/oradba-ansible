@@ -1,0 +1,10 @@
+---
+# Group roles every site must define (fixed set, not a site choice)
+oradba_required_group_roles:
+  - inventory
+  - osdba
+  - osoper
+  - osbackupdba
+  - osdgdba
+  - oskmdba
+  - osracdba

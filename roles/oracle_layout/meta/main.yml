@@ -1,0 +1,17 @@
+---
+galaxy_info:
+  author: Stefan Oehrli
+  description: OraDBA filesystem layout (u00 software, u01 data, u02 archive)
+  company: OraDBA
+  license: Apache-2.0
+  min_ansible_version: "2.16"
+  platforms:
+    - name: EL
+      versions:
+        - "8"
+        - "9"
+  galaxy_tags:
+    - oracle
+    - filesystem
+dependencies:
+  - role: oradba.automation.oradba

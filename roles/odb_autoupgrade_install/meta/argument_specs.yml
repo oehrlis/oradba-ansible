@@ -1,0 +1,53 @@
+---
+# Generated from defaults/main.yml and reviewed; keep both in step.
+argument_specs:
+  main:
+    short_description: odb_autoupgrade engine from a pinned release, autoupgrade.jar through the engine
+    options:
+      odb_autoupgrade_install_version:
+        type: str
+        description: Engine release to install (tag without v).
+      odb_autoupgrade_install_sha256:
+        type: str
+        description: sha256 of the release tarball; changes together with the version.
+      odb_autoupgrade_install_url:
+        type: str
+        description: Download URL of the release tarball.
+      odb_autoupgrade_install_src:
+        type: str
+        description: Controller path of the tarball for offline hosts; wins over the URL.
+      odb_autoupgrade_install_base:
+        type: str
+        description: Install directory of the engine.
+      odb_autoupgrade_install_owner:
+        type: str
+        description: Owner of the engine installation; the engine runs as this user.
+      odb_autoupgrade_install_group:
+        type: str
+        description: Group of the engine installation.
+      odb_autoupgrade_install_dist_dir:
+        type: str
+        description: Directory on the target that keeps the release tarball and a transferred jar.
+      odb_autoupgrade_install_packages:
+        type: list
+        description: Runtime packages (Java 8 or 11, expect, gettext, acl, tar, gzip, unzip, curl); empty
+          list skips the package step.
+        elements: str
+      odb_autoupgrade_install_jar_src:
+        type: str
+        description: Controller path of autoupgrade.jar for offline hosts; wins over jar_url.
+      odb_autoupgrade_install_jar_url:
+        type: str
+        description: Source URL for au_update_jar.sh --from; empty uses the engine default (public Oracle
+          URL).
+      odb_autoupgrade_install_jar_sha256:
+        type: str
+        description: Expected sha256 of autoupgrade.jar (fleet pinning); empty prints the checksum only.
+      odb_autoupgrade_install_jar_update:
+        type: bool
+        description: Run au_update_jar.sh although a jar is installed (installs a newer build, never a
+          downgrade).
+      odb_autoupgrade_install_env:
+        type: dict
+        description: Site settings for etc/autoupgrade.env as KEY to value, no secrets; empty leaves the
+          file unmanaged.

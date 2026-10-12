@@ -1,0 +1,9 @@
+---
+# Conventions apply unchanged; override oradba_* here for a site.
+# oradba_oracle_root: /u00
+# oradba_patch_profile: "19.32"
+
+# Download host secrets from 1Password at run time (needs community.general)
+autoupgrade_keystore_mos_user: dba@example.com
+autoupgrade_keystore_mos_password: "{{ lookup('community.general.onepassword', 'MOS', field='password') }}"
+autoupgrade_keystore_password: "{{ lookup('community.general.onepassword', 'AutoUpgrade Keystore', field='password') }}"

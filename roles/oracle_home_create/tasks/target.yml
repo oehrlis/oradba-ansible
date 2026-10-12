@@ -1,0 +1,61 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: roles/oracle_home_create/tasks/target.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.1.0
+# Purpose....: Derive the target home from patches_info.json when no explicit
+#              oracle_home_create_target_home is given (home naming convention:
+#              <ORACLE_BASE>/product/<releaseUpdate in four parts>).
+# Notes......: The database RU entry wins; any other entry with releaseUpdate
+#              is the fallback. No match is fatal - never a guessed path.
+# Reference..: https://github.com/oehrlis/oradba/blob/main/src/doc/conventions.md
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Use the explicit target home
+  ansible.builtin.set_fact:
+    oracle_home_create_target: "{{ oracle_home_create_target_home }}"
+  when: oracle_home_create_target_home | length > 0
+
+- name: Derive the target home from patches_info.json
+  when: oracle_home_create_target_home | length == 0
+  block:
+    - name: Read patches_info.json
+      ansible.builtin.slurp:
+        src: "{{ oracle_home_create_folder }}/patches_info.json"
+      register: oracle_home_create_patches_info
+
+    - name: Select the release update
+      ansible.builtin.set_fact:
+        oracle_home_create_ru: >-
+          {{ ((oracle_home_create_ru_patches | selectattr('description', 'defined')
+               | selectattr('description', 'search', '(?i)database release update')
+               | map(attribute='releaseUpdate') | list)
+              + (oracle_home_create_ru_patches | map(attribute='releaseUpdate') | list))
+             | select | first | default('') }}
+      vars:
+        oracle_home_create_ru_patches: >-
+          {{ (oracle_home_create_patches_info.content | b64decode | from_json).patches | default([])
+             | selectattr('releaseUpdate', 'defined') | list }}
+
+    - name: Assert a release update was found
+      ansible.builtin.assert:
+        that:
+          - oracle_home_create_ru is match('^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
+        fail_msg: >-
+          No releaseUpdate in {{ oracle_home_create_folder }}/patches_info.json
+          (found "{{ oracle_home_create_ru }}"). Set oracle_home_create_target_home.
+        quiet: true
+
+    - name: Set the target home from the release update
+      ansible.builtin.set_fact:
+        oracle_home_create_target: >-
+          {{ oracle_home_create_oracle_base }}/{{ oradba_oracle_home_prefix }}/{{
+             (oracle_home_create_ru.split('.'))[:4] | join('.') }}
+
+- name: Report the target home
+  ansible.builtin.debug:
+    msg: "Target home: {{ oracle_home_create_target }}"

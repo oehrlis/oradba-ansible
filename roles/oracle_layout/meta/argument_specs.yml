@@ -1,0 +1,20 @@
+---
+# Generated from defaults/main.yml and reviewed; keep both in step.
+argument_specs:
+  main:
+    short_description: OraDBA filesystem layout (u00 software, u01 data, u02 archive)
+    options:
+      oracle_layout_owner:
+        type: str
+        description: Owner of the layout directories.
+      oracle_layout_group:
+        type: str
+        description: Group of the layout directories.
+      oracle_layout_directories:
+        type: list
+        description: Directories to create, each with path, mode and optional owner and group.
+        elements: dict
+      oracle_layout_extra_directories:
+        type: list
+        description: Additional site directories in the same format, appended to oracle_layout_directories.
+        elements: str

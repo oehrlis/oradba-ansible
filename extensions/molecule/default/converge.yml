@@ -1,0 +1,52 @@
+---
+- name: Converge
+  hosts: all
+  gather_facts: true
+  vars:
+    # Molecule only: fake values, keystore runs with --dry-run
+    autoupgrade_keystore_mos_user: molecule@example.com
+    autoupgrade_keystore_mos_password: molecule-not-a-secret
+    autoupgrade_keystore_password: molecule-not-a-secret
+    autoupgrade_keystore_dry_run: true
+    patch_download_dry_run: true
+    oracle_home_create_dry_run: true
+  tasks:
+    - name: Run oracle_user
+      ansible.builtin.include_role:
+        name: oradba.automation.oracle_user
+
+    - name: Run oracle_layout
+      ansible.builtin.include_role:
+        name: oradba.automation.oracle_layout
+
+    - name: Run odb_autoupgrade_install
+      ansible.builtin.include_role:
+        name: oradba.automation.odb_autoupgrade_install
+
+    - name: Run autoupgrade_keystore
+      ansible.builtin.include_role:
+        name: oradba.automation.autoupgrade_keystore
+
+    - name: Run patch_download
+      ansible.builtin.include_role:
+        name: oradba.automation.patch_download
+
+    # Stand-in for a finished download. Literal paths: include_role does not
+    # expose the oradba_* defaults to the play.: patches_info.json drives the home name
+    - name: Place the patches_info.json fixture
+      become: true
+      ansible.builtin.copy:
+        src: patches_info.json
+        dest: /u00/app/oracle/local/odb_autoupgrade/patches/recommended/patches_info.json
+        owner: oracle
+        mode: "0644"
+
+    - name: Run oracle_home_create
+      ansible.builtin.include_role:
+        name: oradba.automation.oracle_home_create
+
+    - name: Assert the home name was derived from the database RU
+      ansible.builtin.assert:
+        that:
+          - oracle_home_create_target == '/u00/app/oracle/product/19.32.0.0'
+        fail_msg: "Derived {{ oracle_home_create_target }}, expected product/19.32.0.0 (DB RU, not OJVM 19.31)"

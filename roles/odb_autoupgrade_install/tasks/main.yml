@@ -1,0 +1,171 @@
+---
+# ------------------------------------------------------------------------------
+# OraDBA - Oracle Database Infrastructure and Security, 5630 Muri, Switzerland
+# ------------------------------------------------------------------------------
+# Name.......: roles/odb_autoupgrade_install/tasks/main.yml
+# Author.....: Stefan Oehrli (oes) stefan.oehrli@oradba.ch
+# Date.......: 2026.10.12
+# Version....: v0.1.0
+# Purpose....: Install the odb_autoupgrade engine from a pinned release tarball
+#              and autoupgrade.jar through the engine (au_update_jar.sh).
+# Notes......: The role never calls autoupgrade.jar itself (maintenance rule 2).
+#              A version change removes bin/ and lib/ before unpacking so that
+#              no file of the old release survives. etc/, jar/, keystore/,
+#              patches/ and logs/ are kept.
+# Reference..: https://github.com/oehrlis/odb_autoupgrade
+# License....: Apache License Version 2.0
+# ------------------------------------------------------------------------------
+
+- name: Install the engine runtime packages
+  become: true
+  ansible.builtin.dnf:
+    name: "{{ odb_autoupgrade_install_packages }}"
+    state: present
+  when: odb_autoupgrade_install_packages | length > 0
+
+- name: Create the engine and distribution directories
+  become: true
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ odb_autoupgrade_install_owner }}"
+    group: "{{ odb_autoupgrade_install_group }}"
+    mode: "0755"
+  loop:
+    - "{{ odb_autoupgrade_install_base }}"
+    - "{{ odb_autoupgrade_install_dist_dir }}"
+
+- name: Set the tarball path
+  ansible.builtin.set_fact:
+    odb_autoupgrade_install_tarball: >-
+      {{ odb_autoupgrade_install_dist_dir }}/odb_autoupgrade-{{ odb_autoupgrade_install_version }}.tar.gz
+
+- name: Download the engine release
+  become: true
+  become_user: "{{ odb_autoupgrade_install_owner }}"
+  ansible.builtin.get_url:
+    url: "{{ odb_autoupgrade_install_url }}"
+    dest: "{{ odb_autoupgrade_install_tarball }}"
+    checksum: "sha256:{{ odb_autoupgrade_install_sha256 }}"
+    mode: "0644"
+  register: odb_autoupgrade_install_download
+  retries: 3
+  delay: 10
+  until: odb_autoupgrade_install_download is succeeded
+  when: odb_autoupgrade_install_src | length == 0
+
+- name: Copy the engine release from the controller
+  become: true
+  ansible.builtin.copy:
+    src: "{{ odb_autoupgrade_install_src }}"
+    dest: "{{ odb_autoupgrade_install_tarball }}"
+    owner: "{{ odb_autoupgrade_install_owner }}"
+    group: "{{ odb_autoupgrade_install_group }}"
+    mode: "0644"
+  when: odb_autoupgrade_install_src | length > 0
+
+# get_url verifies the checksum itself; the copy path does not, so check both
+# the same way on the target - the artefact that is unpacked is what counts.
+- name: Checksum the engine tarball on the target
+  ansible.builtin.stat:
+    path: "{{ odb_autoupgrade_install_tarball }}"
+    checksum_algorithm: sha256
+  register: odb_autoupgrade_install_tarball_stat
+
+- name: Assert the engine tarball matches the pinned sha256
+  ansible.builtin.assert:
+    that:
+      - odb_autoupgrade_install_tarball_stat.stat.checksum == odb_autoupgrade_install_sha256
+    fail_msg: >-
+      {{ odb_autoupgrade_install_tarball }} has sha256
+      {{ odb_autoupgrade_install_tarball_stat.stat.checksum }}, expected
+      {{ odb_autoupgrade_install_sha256 }}. Refusing to install.
+    quiet: true
+
+- name: Read the installed engine version
+  ansible.builtin.slurp:
+    src: "{{ odb_autoupgrade_install_base }}/VERSION"
+  register: odb_autoupgrade_install_installed
+  failed_when: false
+
+- name: Set the installed engine version
+  ansible.builtin.set_fact:
+    odb_autoupgrade_install_installed_version: >-
+      {{ (odb_autoupgrade_install_installed.content | default('') | b64decode | trim) or 'none' }}
+
+- name: Install engine release {{ odb_autoupgrade_install_version }}
+  when: odb_autoupgrade_install_installed_version != odb_autoupgrade_install_version
+  block:
+    - name: Remove the code directories of release {{ odb_autoupgrade_install_installed_version }}
+      become: true
+      ansible.builtin.file:
+        path: "{{ odb_autoupgrade_install_base }}/{{ item }}"
+        state: absent
+      loop:
+        - bin
+        - lib
+
+    - name: Unpack the engine release
+      become: true
+      become_user: "{{ odb_autoupgrade_install_owner }}"
+      ansible.builtin.unarchive:
+        src: "{{ odb_autoupgrade_install_tarball }}"
+        dest: "{{ odb_autoupgrade_install_base }}"
+        remote_src: true
+
+- name: Create the engine runtime directories
+  become: true
+  ansible.builtin.file:
+    path: "{{ odb_autoupgrade_install_base }}/{{ item.path }}"
+    state: directory
+    owner: "{{ odb_autoupgrade_install_owner }}"
+    group: "{{ odb_autoupgrade_install_group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: jar
+      mode: "0755"
+    - path: logs
+      mode: "0750"
+    - path: patches
+      mode: "0750"
+    - path: keystore
+      mode: "0700"
+
+# The engine sources this file as shell code: values are quoted in the
+# template, keys must be plain variable names.
+- name: Assert the site setting names are shell variable names
+  ansible.builtin.assert:
+    that:
+      - odb_autoupgrade_install_env.keys() | reject('match', '^[A-Z_][A-Z0-9_]*$') | list | length == 0
+    fail_msg: >-
+      odb_autoupgrade_install_env keys must match ^[A-Z_][A-Z0-9_]*$, got
+      {{ odb_autoupgrade_install_env.keys() | reject('match', '^[A-Z_][A-Z0-9_]*$') | list }}
+    quiet: true
+  when: odb_autoupgrade_install_env | length > 0
+
+- name: Render the engine site settings
+  become: true
+  ansible.builtin.template:
+    src: autoupgrade.env.j2
+    dest: "{{ odb_autoupgrade_install_base }}/etc/autoupgrade.env"
+    owner: "{{ odb_autoupgrade_install_owner }}"
+    group: "{{ odb_autoupgrade_install_group }}"
+    mode: "0600"
+  when: odb_autoupgrade_install_env | length > 0
+
+- name: Install autoupgrade.jar
+  ansible.builtin.include_tasks: jar.yml
+
+- name: Query the AutoUpgrade version through the engine
+  become: true
+  become_user: "{{ odb_autoupgrade_install_owner }}"
+  ansible.builtin.command:
+    cmd: "{{ odb_autoupgrade_install_base }}/bin/au_run.sh -version"
+  register: odb_autoupgrade_install_au_version
+  changed_when: false
+
+- name: Report the installed engine and AutoUpgrade version
+  ansible.builtin.debug:
+    msg:
+      - "odb_autoupgrade {{ odb_autoupgrade_install_version }} in {{ odb_autoupgrade_install_base }}"
+      - "{{ odb_autoupgrade_install_au_version.stdout_lines | select('search', '(?i)build\\.(version|date)') | list }}"
