@@ -10,6 +10,21 @@ the engine CLI (`au_run.sh`, `au_keystore.sh`, `au_update_jar.sh`, ...), never `
 [OraDBA conventions page](https://github.com/oehrlis/oradba/blob/main/src/doc/conventions.md) and are implemented
 once, as overridable defaults, in the role `oradba`.
 
+## Role in the lab architecture
+
+The only Ansible code of the OraDBA tooling: collection `oradba.automation` for VM and OCI hosts.
+
+- Is: roles and playbooks that configure Linux hosts (OS user, layout, Oracle Homes) by calling
+  [odb_autoupgrade](https://github.com/oehrlis/odb_autoupgrade) for home creation and patching.
+- Is not: a container tool - Ansible never runs inside containers (images are built by oradba-docker, planned).
+  No lab content and no Terraform.
+- Consumers pin the collection version (`requirements.yml`): oci-labs (host provisioning, from M5), the patch
+  test catalogue and oradba-labs for `TARGET=oci`.
+- Neighbours: oci-labs (creates the hosts), odb_autoupgrade (home engine), oradba (runtime and conventions),
+  oradba-labs (lab catalogue). `ansible/roles` from oci-labs move here (M4).
+
+See the [lab architecture overview](https://github.com/oehrlis/oradba-labs/blob/main/docs/architecture.md).
+
 ## Requirements
 
 - ansible-core 2.16 or later on the controller
